@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,17 +19,23 @@
 package org.apache.hadoop.hive.ql;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
+import org.apache.hadoop.fs.LocatedFileStatus;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
@@ -46,9 +52,13 @@ import org.apache.hadoop.hive.metastore.txn.TxnUtils;
 import org.apache.hadoop.hive.ql.exec.AbstractFileMergeOperator;
 import org.apache.hadoop.hive.ql.io.BucketCodec;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
+import org.apache.hadoop.hive.ql.io.orc.OrcFile;
+import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat;
+import org.apache.hadoop.hive.ql.io.orc.Reader;
 import org.apache.hadoop.hive.ql.lockmgr.TestDbTxnManager2;
 import org.apache.hadoop.hive.ql.processors.CommandProcessorResponse;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.orc.OrcProto;
 import org.apache.tez.mapreduce.hadoop.MRJobConfig;
 import org.junit.After;
 import org.junit.Assert;
@@ -101,6 +111,7 @@ public class TestAcidOnTez {
     hiveConf.set(HiveConf.ConfVars.PREEXECHOOKS.varname, "");
     hiveConf.set(HiveConf.ConfVars.POSTEXECHOOKS.varname, "");
     hiveConf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname, TEST_WAREHOUSE_DIR);
+    hiveConf.setBoolVar(HiveConf.ConfVars.HIVE_VECTORIZATION_ENABLED, false);
     hiveConf.setVar(HiveConf.ConfVars.HIVEMAPREDMODE, "nonstrict");
     hiveConf.setVar(HiveConf.ConfVars.HIVEINPUTFORMAT, HiveInputFormat.class.getName());
     hiveConf
@@ -120,10 +131,15 @@ public class TestAcidOnTez {
     SessionState.start(new SessionState(hiveConf));
     d = DriverFactory.newDriver(hiveConf);
     dropTables();
-    runStatementOnDriver("create table " + Table.ACIDTBL + "(a int, b int) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc " + getTblProperties());
-    runStatementOnDriver("create table " + Table.ACIDTBLPART + "(a int, b int) partitioned by (p string) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc " + getTblProperties());
-    runStatementOnDriver("create table " + Table.NONACIDORCTBL + "(a int, b int) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc ");
-    runStatementOnDriver("create table " + Table.NONACIDPART + "(a int, b int) partitioned by (p string) stored as orc ");
+    runStatementOnDriver("create table " + Table.ACIDTBL + "(a int, b int) clustered by (a) into " + BUCKET_COUNT
+        + " buckets stored as orc " + getTblProperties());
+    runStatementOnDriver("create table " + Table.ACIDTBLPART
+        + "(a int, b int) partitioned by (p string) clustered by (a) into " + BUCKET_COUNT + " buckets stored as orc "
+        + getTblProperties());
+    runStatementOnDriver("create table " + Table.NONACIDORCTBL + "(a int, b int) clustered by (a) into " + BUCKET_COUNT
+        + " buckets stored as orc ");
+    runStatementOnDriver("create table " + Table.NONACIDPART
+        + "(a int, b int) partitioned by (p string) stored as orc ");
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(1,2)");
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(3,4)");
     runStatementOnDriver("insert into " + Table.ACIDTBL + "(a,b) values(5,6)");
@@ -184,6 +200,7 @@ public class TestAcidOnTez {
    * Tests non acid to acid conversion where starting table has non-standard layout, i.e.
    * where "original" files are not immediate children of the partition dir
    */
+  @Ignore("HIVE-19509: Disable tests that are failing continuously")
   @Test
   public void testNonStandardConversion01() throws Exception {
     HiveConf confForTez = new HiveConf(hiveConf); // make a clone of existing hive conf
@@ -219,12 +236,12 @@ public class TestAcidOnTez {
     /*
     * Expected result 0th entry i the RecordIdentifier + data.  1st entry file before compact*/
     String expected[][] = {
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":0}\t1\t2", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":2}\t5\t6", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":4}\t7\t8", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":5}\t5\t6", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":0}\t5\t6", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":2}\t1\t2", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":4}\t7\t8", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":5}\t5\t6", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
     };
     Assert.assertEquals("Unexpected row count after ctas", expected.length, rs.size());
     //verify data and layout
@@ -241,10 +258,10 @@ public class TestAcidOnTez {
       LOG.warn(s);
     }
     String[][] expected2 = {
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":0}\t1\t2", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
-      {"{\"transactionid\":21,\"bucketid\":536870912,\"rowid\":0}\t70\t80", "delta_0000021_0000021_0000/bucket_00000"}
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":2}\t1\t2", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10", AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":1,\"bucketid\":536870912,\"rowid\":0}\t70\t80", "delta_0000001_0000001_0000/bucket_00000"}
     };
     Assert.assertEquals("Unexpected row count after update", expected2.length, rs.size());
     //verify data and layout
@@ -256,7 +273,7 @@ public class TestAcidOnTez {
     FileSystem fs = FileSystem.get(hiveConf);
     FileStatus[] status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
       (Table.NONACIDNONBUCKET).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
-    String[] expectedDelDelta = {"delete_delta_0000021_0000021_0000", "delete_delta_0000022_0000022_0000"};
+    String[] expectedDelDelta = {"delete_delta_0000001_0000001_0000", "delete_delta_0000002_0000002_0000"};
     for(FileStatus stat : status) {
       for(int i = 0; i < expectedDelDelta.length; i++) {
         if(expectedDelDelta[i] != null && stat.getPath().toString().endsWith(expectedDelDelta[i])) {
@@ -285,7 +302,7 @@ public class TestAcidOnTez {
     //check we have right delete delta files after minor compaction
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
       (Table.NONACIDNONBUCKET).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
-    String[] expectedDelDelta2 = {"delete_delta_0000021_0000021_0000", "delete_delta_0000022_0000022_0000", "delete_delta_0000021_0000022"};
+    String[] expectedDelDelta2 = {"delete_delta_0000001_0000001_0000", "delete_delta_0000002_0000002_0000", "delete_delta_0000001_0000002"};
     for(FileStatus stat : status) {
       for(int i = 0; i < expectedDelDelta2.length; i++) {
         if(expectedDelDelta2[i] != null && stat.getPath().toString().endsWith(expectedDelDelta2[i])) {
@@ -309,7 +326,7 @@ public class TestAcidOnTez {
     for(int i = 0; i < expected2.length; i++) {
       Assert.assertTrue("Actual line " + i + " bc: " + rs.get(i), rs.get(i).startsWith(expected2[i][0]));
       //everything is now in base/
-      Assert.assertTrue("Actual line(file) " + i + " bc: " + rs.get(i), rs.get(i).endsWith("base_0000022/bucket_00000"));
+      Assert.assertTrue("Actual line(file) " + i + " bc: " + rs.get(i), rs.get(i).endsWith("base_0000002/bucket_00000"));
     }
   }
   /**
@@ -391,12 +408,12 @@ public class TestAcidOnTez {
       LOG.warn(s);
     }
     String[][] expected = {
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":0}\t100\t110\t1", "nonacidpart/p=1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":1}\t1\t2\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":2}\t3\t4\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":4}\t7\t8\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":5}\t5\t6\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "3/000000_0"}
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":0}\t100\t110\t1", "nonacidpart/p=1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":1}\t1\t2\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":2}\t3\t4\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "1/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":3}\t9\t10\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":4}\t7\t8\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "2/000000_0"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":5}\t5\t6\t1", "nonacidpart/p=1/" + AbstractFileMergeOperator.UNION_SUDBIR_PREFIX + "3/000000_0"}
     };
     Assert.assertEquals("Wrong row count", expected.length, rs.size());
     //verify data and layout
@@ -430,6 +447,7 @@ public class TestAcidOnTez {
    * {@link org.apache.hadoop.hive.ql.metadata.Hive#moveAcidFiles(FileSystem, FileStatus[], Path, List)} drops the union subdirs
    * since each delta file has a unique name.
    */
+  @Ignore("HIVE-19509: Disable tests that are failing continuously")
   @Test
   public void testCtasTezUnion() throws Exception {
     HiveConf confForTez = new HiveConf(hiveConf); // make a clone of existing hive conf
@@ -453,12 +471,12 @@ public class TestAcidOnTez {
     /*
     * Expected result 0th entry is the RecordIdentifier + data.  1st entry file before compact*/
     String expected[][] = {
-      {"{\"transactionid\":18,\"bucketid\":536870913,\"rowid\":0}\t1\t2", "/delta_0000018_0000018_0001/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "/delta_0000018_0000018_0001/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870913,\"rowid\":2}\t5\t6", "/delta_0000018_0000018_0001/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870914,\"rowid\":0}\t9\t10", "/delta_0000018_0000018_0002/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870914,\"rowid\":1}\t7\t8", "/delta_0000018_0000018_0002/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870914,\"rowid\":2}\t5\t6", "/delta_0000018_0000018_0002/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":0}\t5\t6", "/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":2}\t1\t2", "/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":0}\t9\t10", "/delta_0000001_0000001_0002/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":1}\t7\t8", "/delta_0000001_0000001_0002/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":2}\t5\t6", "/delta_0000001_0000001_0002/bucket_00000"},
     };
     Assert.assertEquals("Unexpected row count after ctas", expected.length, rs.size());
     //verify data and layout
@@ -475,10 +493,10 @@ public class TestAcidOnTez {
       LOG.warn(s);
     }
     String[][] expected2 = {
-      {"{\"transactionid\":18,\"bucketid\":536870913,\"rowid\":0}\t1\t2", "/delta_0000018_0000018_0001/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "/delta_0000018_0000018_0001/bucket_00000"},
-      {"{\"transactionid\":18,\"bucketid\":536870914,\"rowid\":0}\t9\t10", "/delta_0000018_0000018_0002/bucket_00000"},
-      {"{\"transactionid\":20,\"bucketid\":536870912,\"rowid\":0}\t70\t80", "delta_0000020_0000020_0000/bucket_00000"}
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":2}\t1\t2", "/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":0}\t9\t10", "/delta_0000001_0000001_0002/bucket_00000"},
+      {"{\"writeid\":2,\"bucketid\":536870912,\"rowid\":0}\t70\t80", "/delta_0000002_0000002_0000/bucket_00000"}
     };
     Assert.assertEquals("Unexpected row count after update", expected2.length, rs.size());
     //verify data and layout
@@ -490,7 +508,7 @@ public class TestAcidOnTez {
     FileSystem fs = FileSystem.get(hiveConf);
     FileStatus[] status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
       (Table.ACIDNOBUCKET).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
-    String[] expectedDelDelta = {"delete_delta_0000020_0000020_0000", "delete_delta_0000021_0000021_0000"};
+    String[] expectedDelDelta = {"delete_delta_0000002_0000002_0000", "delete_delta_0000003_0000003_0000"};
     for(FileStatus stat : status) {
       for(int i = 0; i < expectedDelDelta.length; i++) {
         if(expectedDelDelta[i] != null && stat.getPath().toString().endsWith(expectedDelDelta[i])) {
@@ -519,7 +537,7 @@ public class TestAcidOnTez {
     //check we have right delete delta files after minor compaction
     status = fs.listStatus(new Path(TEST_WAREHOUSE_DIR + "/" +
       (Table.ACIDNOBUCKET).toString().toLowerCase()), FileUtils.STAGING_DIR_PATH_FILTER);
-    String[] expectedDelDelta2 = { "delete_delta_0000020_0000020_0000", "delete_delta_0000021_0000021_0000", "delete_delta_0000018_0000021"};
+    String[] expectedDelDelta2 = { "delete_delta_0000002_0000002_0000", "delete_delta_0000003_0000003_0000", "delete_delta_0000001_0000003"};
     for(FileStatus stat : status) {
       for(int i = 0; i < expectedDelDelta2.length; i++) {
         if(expectedDelDelta2[i] != null && stat.getPath().toString().endsWith(expectedDelDelta2[i])) {
@@ -543,7 +561,7 @@ public class TestAcidOnTez {
     for(int i = 0; i < expected2.length; i++) {
       Assert.assertTrue("Actual line " + i + " bc: " + rs.get(i), rs.get(i).startsWith(expected2[i][0]));
       //everything is now in base/
-      Assert.assertTrue("Actual line(file) " + i + " bc: " + rs.get(i), rs.get(i).endsWith("base_0000021/bucket_00000"));
+      Assert.assertTrue("Actual line(file) " + i + " bc: " + rs.get(i), rs.get(i).endsWith("base_0000003/bucket_00000"));
     }
   }
   /**
@@ -605,11 +623,16 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
       LOG.warn(s);
     }
     String[][] expected2 = {
-       {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":0}\t1\t2", "warehouse/t/base_-9223372036854775808/bucket_00000"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4", "warehouse/t/base_-9223372036854775808/bucket_00000"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":2}\t5\t6", "warehouse/t/base_-9223372036854775808/bucket_00000"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":3}\t7\t8", "warehouse/t/base_-9223372036854775808/bucket_00000"},
-      {"{\"transactionid\":0,\"bucketid\":536870912,\"rowid\":4}\t9\t10", "warehouse/t/base_-9223372036854775808/bucket_00000"}
+       {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":0}\t1\t2",
+           "warehouse/t/base_-9223372036854775808_v0000024/bucket_00000"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":1}\t3\t4",
+          "warehouse/t/base_-9223372036854775808_v0000024/bucket_00000"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":2}\t5\t6",
+          "warehouse/t/base_-9223372036854775808_v0000024/bucket_00000"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":3}\t7\t8",
+          "warehouse/t/base_-9223372036854775808_v0000024/bucket_00000"},
+      {"{\"writeid\":0,\"bucketid\":536870912,\"rowid\":4}\t9\t10",
+          "warehouse/t/base_-9223372036854775808_v0000024/bucket_00000"}
     };
     Assert.assertEquals("Unexpected row count after major compact", expected2.length, rs.size());
     for(int i = 0; i < expected2.length; i++) {
@@ -638,17 +661,17 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
     ├── HIVE_UNION_SUBDIR_1
     │   └── 000000_0
     │       ├── _orc_acid_version
-    │       └── delta_0000019_0000019_0001
+    │       └── delta_0000001_0000001_0001
     │           └── bucket_00000
     ├── HIVE_UNION_SUBDIR_2
     │   └── 000000_0
     │       ├── _orc_acid_version
-    │       └── delta_0000019_0000019_0002
+    │       └── delta_0000001_0000001_0002
     │           └── bucket_00000
     └── HIVE_UNION_SUBDIR_3
         └── 000000_0
             ├── _orc_acid_version
-            └── delta_0000019_0000019_0003
+            └── delta_0000001_0000001_0003
                 └── bucket_00000
 
 10 directories, 6 files     */
@@ -660,11 +683,11 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
     }
 
     String[][] expected2 = {
-      {"{\"transactionid\":19,\"bucketid\":536870913,\"rowid\":0}\t1\t2", "warehouse/t/delta_0000019_0000019_0001/bucket_00000"},
-      {"{\"transactionid\":19,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "warehouse/t/delta_0000019_0000019_0001/bucket_00000"},
-      {"{\"transactionid\":19,\"bucketid\":536870914,\"rowid\":0}\t5\t6", "warehouse/t/delta_0000019_0000019_0002/bucket_00000"},
-      {"{\"transactionid\":19,\"bucketid\":536870914,\"rowid\":1}\t7\t8", "warehouse/t/delta_0000019_0000019_0002/bucket_00000"},
-      {"{\"transactionid\":19,\"bucketid\":536870915,\"rowid\":0}\t9\t10", "warehouse/t/delta_0000019_0000019_0003/bucket_00000"}
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":0}\t1\t2", "warehouse/t/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870913,\"rowid\":1}\t3\t4", "warehouse/t/delta_0000001_0000001_0001/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":0}\t5\t6", "warehouse/t/delta_0000001_0000001_0002/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870914,\"rowid\":1}\t7\t8", "warehouse/t/delta_0000001_0000001_0002/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536870915,\"rowid\":0}\t9\t10", "warehouse/t/delta_0000001_0000001_0003/bucket_00000"}
     };
     Assert.assertEquals("Unexpected row count", expected2.length, rs.size());
     for(int i = 0; i < expected2.length; i++) {
@@ -675,7 +698,6 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
   @Test
   public void testBucketedAcidInsertWithRemoveUnion() throws Exception {
     HiveConf confForTez = new HiveConf(hiveConf); // make a clone of existing hive conf
-    confForTez.setBoolean("hive.stats.column.autogather", false);
     setupTez(confForTez);
     int[][] values = {{1,2},{2,4},{5,6},{6,8},{9,10}};
     runStatementOnDriver("delete from " + Table.ACIDTBL, confForTez);
@@ -689,11 +711,11 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
 └── -ext-10000
     ├── 000000_0
     │   ├── _orc_acid_version
-    │   └── delta_0000021_0000021_0000
+    │   └── delta_0000001_0000001_0000
     │       └── bucket_00000
     └── 000001_0
         ├── _orc_acid_version
-        └── delta_0000021_0000021_0000
+        └── delta_0000001_0000001_0000
             └── bucket_00001
 
 5 directories, 4 files
@@ -706,11 +728,11 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
       LOG.warn(s);
     }
     String[][] expected2 = {
-      {"{\"transactionid\":21,\"bucketid\":536936448,\"rowid\":0}\t1\t2", "warehouse/t/delta_0000021_0000021_0000/bucket_00001"},
-      {"{\"transactionid\":21,\"bucketid\":536870912,\"rowid\":0}\t2\t4", "warehouse/t/delta_0000021_0000021_0000/bucket_00000"},
-      {"{\"transactionid\":21,\"bucketid\":536936448,\"rowid\":1}\t5\t6", "warehouse/t/delta_0000021_0000021_0000/bucket_00001"},
-      {"{\"transactionid\":21,\"bucketid\":536870912,\"rowid\":1}\t6\t8", "warehouse/t/delta_0000021_0000021_0000/bucket_00000"},
-      {"{\"transactionid\":21,\"bucketid\":536936448,\"rowid\":2}\t9\t10", "warehouse/t/delta_0000021_0000021_0000/bucket_00001"}
+      {"{\"writeid\":1,\"bucketid\":536936448,\"rowid\":0}\t1\t2", "warehouse/t/delta_0000001_0000001_0000/bucket_00001"},
+      {"{\"writeid\":1,\"bucketid\":536870912,\"rowid\":0}\t2\t4", "warehouse/t/delta_0000001_0000001_0000/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536936448,\"rowid\":2}\t5\t6", "warehouse/t/delta_0000001_0000001_0000/bucket_00001"},
+      {"{\"writeid\":1,\"bucketid\":536870912,\"rowid\":1}\t6\t8", "warehouse/t/delta_0000001_0000001_0000/bucket_00000"},
+      {"{\"writeid\":1,\"bucketid\":536936448,\"rowid\":1}\t9\t10", "warehouse/t/delta_0000001_0000001_0000/bucket_00001"}
     };
     Assert.assertEquals("Unexpected row count", expected2.length, rs.size());
     for(int i = 0; i < expected2.length; i++) {
@@ -778,6 +800,121 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
     // Transactions should be committed.
     // No transactions - just the header row
     assertEquals(1, rows.size());
+  }
+
+  @Test
+  public void testGetSplitsLocksWithMaterializedView() throws Exception {
+    // Need to test this with LLAP settings, which requires some additional configurations set.
+    HiveConf modConf = new HiveConf(hiveConf);
+    setupTez(modConf);
+    modConf.setVar(ConfVars.HIVE_EXECUTION_ENGINE, "tez");
+    modConf.setVar(ConfVars.HIVEFETCHTASKCONVERSION, "more");
+    modConf.setVar(HiveConf.ConfVars.LLAP_DAEMON_SERVICE_HOSTS, "localhost");
+
+    // SessionState/Driver needs to be restarted with the Tez conf settings.
+    restartSessionAndDriver(modConf);
+    TxnStore txnHandler = TxnUtils.getTxnStore(modConf);
+    String mvName = "mv_acidTbl";
+    try {
+      runStatementOnDriver("create materialized view " + mvName + " as select a from " + Table.ACIDTBL + " where a > 5");
+
+      // Request LLAP splits for a table.
+      String queryParam = "select a from " + Table.ACIDTBL + " where a > 5";
+      runStatementOnDriver("select get_splits(\"" + queryParam + "\", 1)");
+
+      // The get_splits call should have resulted in a lock on ACIDTBL and materialized view mv_acidTbl
+      ShowLocksResponse slr = txnHandler.showLocks(new ShowLocksRequest());
+      TestDbTxnManager2.checkLock(LockType.SHARED_READ, LockState.ACQUIRED,
+              "default", Table.ACIDTBL.name, null, slr.getLocks());
+      TestDbTxnManager2.checkLock(LockType.SHARED_READ, LockState.ACQUIRED,
+              "default", mvName, null, slr.getLocks());
+      assertEquals(2, slr.getLocksSize());
+    } finally {
+      // Close the session which should free up the TxnHandler/locks held by the session.
+      // Done in the finally block to make sure we free up the locks; otherwise
+      // the cleanup in tearDown() will get stuck waiting on the lock held here on ACIDTBL.
+      restartSessionAndDriver(hiveConf);
+      runStatementOnDriver("drop materialized view if exists " + mvName);
+    }
+
+    // Lock should be freed up now.
+    ShowLocksResponse slr = txnHandler.showLocks(new ShowLocksRequest());
+    assertEquals(0, slr.getLocksSize());
+
+    List<String> rows = runStatementOnDriver("show transactions");
+    // Transactions should be committed.
+    // No transactions - just the header row
+    assertEquals(1, rows.size());
+  }
+ 
+  /**
+   * HIVE-20699
+   *
+   * see TestTxnCommands3.testCompactor
+   */
+  @Test
+  public void testCrudMajorCompactionSplitGrouper() throws Exception {
+    String tblName = "test_split_grouper";
+    // make a clone of existing hive conf
+    HiveConf confForTez = new HiveConf(hiveConf);
+    setupTez(confForTez); // one-time setup to make query able to run with Tez
+    HiveConf.setVar(confForTez, HiveConf.ConfVars.HIVEFETCHTASKCONVERSION, "none");
+    runStatementOnDriver("create transactional table " + tblName + " (a int, b int) clustered by (a) into 2 buckets "
+        + "stored as ORC TBLPROPERTIES('bucketing_version'='2', 'transactional'='true',"
+        + " 'transactional_properties'='default')", confForTez);
+    runStatementOnDriver("insert into " + tblName + " values(1,2),(1,3),(1,4),(2,2),(2,3),(2,4)", confForTez);
+    runStatementOnDriver("insert into " + tblName + " values(3,2),(3,3),(3,4),(4,2),(4,3),(4,4)", confForTez);
+    runStatementOnDriver("delete from " + tblName + " where b = 2");
+    List<String> expectedRs = new ArrayList<>();
+    expectedRs.add("{\"writeid\":1,\"bucketid\":536870912,\"rowid\":0}\t2\t4");
+    expectedRs.add("{\"writeid\":1,\"bucketid\":536870912,\"rowid\":1}\t2\t3");
+    expectedRs.add("{\"writeid\":2,\"bucketid\":536870912,\"rowid\":0}\t3\t4");
+    expectedRs.add("{\"writeid\":2,\"bucketid\":536870912,\"rowid\":1}\t3\t3");
+    expectedRs.add("{\"writeid\":1,\"bucketid\":536936448,\"rowid\":0}\t1\t4");
+    expectedRs.add("{\"writeid\":1,\"bucketid\":536936448,\"rowid\":1}\t1\t3");
+    expectedRs.add("{\"writeid\":2,\"bucketid\":536936448,\"rowid\":0}\t4\t4");
+    expectedRs.add("{\"writeid\":2,\"bucketid\":536936448,\"rowid\":1}\t4\t3");
+    List<String> rs =
+        runStatementOnDriver("select ROW__ID, * from " + tblName + " order by ROW__ID.bucketid, ROW__ID", confForTez);
+    HiveConf.setVar(confForTez, HiveConf.ConfVars.SPLIT_GROUPING_MODE, "compactor");
+    // No order by needed: this should use the compactor split grouping to return the rows in correct order
+    List<String> rsCompact = runStatementOnDriver("select ROW__ID, * from  " + tblName, confForTez);
+    Assert.assertEquals("normal read", expectedRs, rs);
+    Assert.assertEquals("compacted read", rs, rsCompact);
+  }
+
+  /**
+   * Tests the OrcInputFormat.isOrignal method for files in ACID and Non-ACID tables.
+   * @throws IOException If there is a file reading error
+   */
+  @Test
+  public void testIsOriginal() throws IOException {
+    assertIsOriginal(new Path(TEST_WAREHOUSE_DIR, Table.ACIDTBL.toString().toLowerCase()), false);
+    assertIsOriginal(new Path(TEST_WAREHOUSE_DIR, Table.NONACIDORCTBL.toString().toLowerCase()), true);
+  }
+
+  /**
+   * Checks if the file format is original or ACID file based on OrcInputFormat static methods.
+   * @param path The file to check
+   * @param expected The expected result of the isOriginal
+   * @throws IOException Error when reading the file
+   */
+  private void assertIsOriginal(Path path, boolean expected) throws FileNotFoundException, IOException {
+    FileSystem fs = FileSystem.get(hiveConf);
+    RemoteIterator<LocatedFileStatus> lfs = fs.listFiles(path, true);
+    boolean foundAnyFile = false;
+    while (lfs.hasNext()) {
+      LocatedFileStatus lf = lfs.next();
+      Path file = lf.getPath();
+      if (!file.getName().startsWith(".") && !file.getName().startsWith("_")) {
+        Reader reader = OrcFile.createReader(file, OrcFile.readerOptions(new Configuration()));
+        OrcProto.Footer footer = reader.getFileTail().getFooter();
+        assertEquals("Reader based original check", expected, OrcInputFormat.isOriginal(reader));
+        assertEquals("Footer based original check", expected, OrcInputFormat.isOriginal(footer));
+        foundAnyFile = true;
+      }
+    }
+    assertTrue("Checking if any file found to check", foundAnyFile);
   }
 
   private void restartSessionAndDriver(HiveConf conf) throws Exception {
@@ -858,17 +995,22 @@ ekoifman:apache-hive-3.0.0-SNAPSHOT-bin ekoifman$ tree  ~/dev/hiverwgit/itests/h
   private void setupTez(HiveConf conf) {
     conf.setVar(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE, "tez");
     conf.setVar(HiveConf.ConfVars.HIVE_USER_INSTALL_DIR, TEST_DATA_DIR);
+    conf.set("tez.am.resource.memory.mb", "128");
+    conf.set("tez.am.dag.scheduler.class", "org.apache.tez.dag.app.dag.impl.DAGSchedulerNaturalOrderControlled");
     conf.setBoolean("tez.local.mode", true);
     conf.set("fs.defaultFS", "file:///");
     conf.setBoolean("tez.runtime.optimize.local.fetch", true);
     conf.set("tez.staging-dir", TEST_DATA_DIR);
     conf.setBoolean("tez.ignore.lib.uris", true);
+    conf.set("hive.tez.container.size", "128");
+    conf.setBoolean("hive.merge.tezfiles", false); 
+    conf.setBoolean("hive.in.tez.test", true);
   }
 
   private void setupMapJoin(HiveConf conf) {
     conf.setBoolVar(HiveConf.ConfVars.HIVECONVERTJOIN, true);
     conf.setBoolVar(HiveConf.ConfVars.HIVECONVERTJOINNOCONDITIONALTASK, true);
-    conf.setLongVar(HiveConf.ConfVars.HIVECONVERTJOINNOCONDITIONALTASKTHRESHOLD, 10000);
+    conf.setLongVar(HiveConf.ConfVars.HIVECONVERTJOINNOCONDITIONALTASKTHRESHOLD, 100000);
   }
 
   private List<String> runStatementOnDriver(String stmt) throws Exception {

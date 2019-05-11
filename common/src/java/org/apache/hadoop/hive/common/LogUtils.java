@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -29,10 +29,11 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.Appender;
-import org.apache.logging.log4j.core.LogEvent;
+import org.apache.logging.log4j.core.appender.FileAppender;
+import org.apache.logging.log4j.core.appender.RollingFileAppender;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.RollingRandomAccessFileAppender;
 import org.apache.logging.log4j.core.appender.routing.RoutingAppender;
-import org.apache.logging.log4j.core.config.AppenderControl;
 import org.apache.logging.log4j.core.config.Configurator;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import org.apache.logging.log4j.core.impl.Log4jContextFactory;
@@ -233,6 +234,28 @@ public class LogUtils {
   }
 
   /**
+   * Get path of the log file for user to see on the WebUI.
+   */
+  public static String getLogFilePath() {
+    String logFilePath = null;
+    org.apache.logging.log4j.Logger rootLogger = LogManager.getRootLogger();
+    if (rootLogger instanceof org.apache.logging.log4j.core.Logger) {
+      org.apache.logging.log4j.core.Logger coreLogger =
+          (org.apache.logging.log4j.core.Logger)rootLogger;
+      for (Appender appender : coreLogger.getAppenders().values()) {
+        if (appender instanceof FileAppender) {
+          logFilePath = ((FileAppender) appender).getFileName();
+        } else if (appender instanceof RollingFileAppender) {
+          logFilePath = ((RollingFileAppender) appender).getFileName();
+        } else if (appender instanceof RollingRandomAccessFileAppender) {
+          logFilePath = ((RollingRandomAccessFileAppender) appender).getFileName();
+        }
+      }
+    }
+    return logFilePath;
+  }
+
+  /**
    * Stop the subordinate appender for the operation log so it will not leak a file descriptor.
    * @param routingAppenderName the name of the RoutingAppender
    * @param queryId the id of the query that is closing
@@ -248,14 +271,9 @@ public class LogUtils {
       // The appender is configured to use ${ctx:queryId} by registerRoutingAppender()
       try {
         Class<? extends RoutingAppender> clazz = routingAppender.getClass();
-        Method method = clazz.getDeclaredMethod("getControl", String.class, LogEvent.class);
+        Method method = clazz.getDeclaredMethod("deleteAppender", String.class);
         method.setAccessible(true);
-        AppenderControl control = (AppenderControl) method.invoke(routingAppender, queryId, null);
-        Appender subordinateAppender = control.getAppender();
-        if (!subordinateAppender.isStopped()) {
-          // this will cause the subordinate appender to close its output stream.
-          subordinateAppender.stop();
-        }
+        method.invoke(routingAppender, queryId);
       } catch (NoSuchMethodException | SecurityException | IllegalAccessException |
           IllegalArgumentException | InvocationTargetException e) {
         l4j.warn("Unable to close the operation log appender for query id " + queryId, e);

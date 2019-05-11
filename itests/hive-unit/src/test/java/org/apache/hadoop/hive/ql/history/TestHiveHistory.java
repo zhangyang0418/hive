@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,7 +19,6 @@
 package org.apache.hadoop.hive.ql.history;
 
 
-import java.io.PrintStream;
 import java.io.UnsupportedEncodingException;
 import java.lang.reflect.Proxy;
 import java.util.LinkedList;
@@ -32,6 +31,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.cli.CliSessionState;
 import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.common.LogUtils.LogInitializationException;
+import org.apache.hadoop.hive.common.io.SessionStream;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.Warehouse;
@@ -107,7 +107,7 @@ public class TestHiveHistory extends TestCase {
         db.createTable(src, cols, null, TextInputFormat.class,
             IgnoreKeyTextOutputFormat.class);
         db.loadTable(hadoopDataFile[i], src,
-          LoadFileType.KEEP_EXISTING, false, false, false, false, null, 0);
+          LoadFileType.KEEP_EXISTING, false, false, false, false, null, 0, false);
         i++;
       }
 
@@ -135,8 +135,8 @@ public class TestHiveHistory extends TestCase {
       CliSessionState ss = new CliSessionState(hconf);
       ss.in = System.in;
       try {
-        ss.out = new PrintStream(System.out, true, "UTF-8");
-        ss.err = new PrintStream(System.err, true, "UTF-8");
+        ss.out = new SessionStream(System.out, true, "UTF-8");
+        ss.err = new SessionStream(System.err, true, "UTF-8");
       } catch (UnsupportedEncodingException e) {
         System.exit(3);
       }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,11 +19,19 @@ package org.apache.hadoop.hive.ql.parse.repl.dump;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.Database;
+import org.apache.hadoop.hive.metastore.api.NotificationEvent;
+import org.apache.hadoop.hive.ql.ErrorMsg;
+import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.metadata.Table;
+import org.apache.hadoop.hive.ql.parse.ReplicationSpec;
 import org.apache.hadoop.hive.ql.parse.SemanticAnalyzer;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.io.IOUtils;
@@ -33,8 +41,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.DataOutputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -67,7 +77,7 @@ public class Utils {
     }
   }
 
-  public static Iterable<? extends String> matchesDb(Hive db, String dbPattern) throws HiveException {
+  public static Iterable<String> matchesDb(Hive db, String dbPattern) throws HiveException {
     if (dbPattern == null) {
       return db.getAllDatabases();
     } else {
@@ -75,7 +85,7 @@ public class Utils {
     }
   }
 
-  public static Iterable<? extends String> matchesTbl(Hive db, String dbName, String tblPattern)
+  public static Iterable<String> matchesTbl(Hive db, String dbName, String tblPattern)
       throws HiveException {
     if (tblPattern == null) {
       return getAllTables(db, dbName);
@@ -151,5 +161,82 @@ public class Utils {
       }
     }
     return false;
+  }
+
+  /**
+   * validates if a table can be exported, similar to EximUtil.shouldExport with few replication
+   * specific checks.
+   */
+  public static boolean shouldReplicate(ReplicationSpec replicationSpec, Table tableHandle,
+                                        boolean isEventDump, HiveConf hiveConf) {
+    if (replicationSpec == null) {
+      replicationSpec = new ReplicationSpec();
+    }
+
+    if (replicationSpec.isNoop() || tableHandle == null) {
+      return false;
+    }
+
+    // if its metadata only, then dump metadata of non native tables also.
+    if (tableHandle.isNonNative() && !replicationSpec.isMetadataOnly()) {
+      return false;
+    }
+
+    if (replicationSpec.isInReplicationScope()) {
+      if (tableHandle.isTemporary()) {
+        return false;
+      }
+
+      if (MetaStoreUtils.isExternalTable(tableHandle.getTTable())) {
+        boolean shouldReplicateExternalTables = hiveConf.getBoolVar(HiveConf.ConfVars.REPL_INCLUDE_EXTERNAL_TABLES)
+                || replicationSpec.isMetadataOnly();
+        if (isEventDump) {
+          // Skip dumping of events related to external tables if bootstrap is enabled on it.
+          shouldReplicateExternalTables = shouldReplicateExternalTables
+                  && !hiveConf.getBoolVar(HiveConf.ConfVars.REPL_BOOTSTRAP_EXTERNAL_TABLES);
+        }
+        return shouldReplicateExternalTables;
+      }
+
+      if (AcidUtils.isTransactionalTable(tableHandle.getTTable())) {
+        if (!ReplUtils.includeAcidTableInDump(hiveConf)) {
+          return false;
+        }
+
+        // Skip dumping events related to ACID tables if bootstrap is enabled on it
+        if (isEventDump) {
+          return !hiveConf.getBoolVar(HiveConf.ConfVars.REPL_BOOTSTRAP_ACID_TABLES);
+        }
+      }
+    }
+    return true;
+  }
+
+  public static boolean shouldReplicate(NotificationEvent tableForEvent,
+      ReplicationSpec replicationSpec, Hive db, boolean isEventDump, HiveConf hiveConf) {
+    Table table;
+    try {
+      table = db.getTable(tableForEvent.getDbName(), tableForEvent.getTableName());
+    } catch (HiveException e) {
+      LOG.info(
+          "error while getting table info for" + tableForEvent.getDbName() + "." + tableForEvent
+              .getTableName(), e);
+      return false;
+    }
+    return shouldReplicate(replicationSpec, table, isEventDump, hiveConf);
+  }
+
+  static List<Path> getDataPathList(Path fromPath, ReplicationSpec replicationSpec, HiveConf conf)
+          throws IOException {
+    if (replicationSpec.isTransactionalTableDump()) {
+      try {
+        conf.set(ValidTxnList.VALID_TXNS_KEY, replicationSpec.getValidTxnList());
+        return AcidUtils.getValidDataPaths(fromPath, conf, replicationSpec.getValidWriteIdList());
+      } catch (FileNotFoundException e) {
+        throw new IOException(ErrorMsg.FILE_NOT_FOUND.format(e.getMessage()), e);
+      }
+    } else {
+      return Collections.singletonList(fromPath);
+    }
   }
 }

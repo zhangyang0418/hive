@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -116,16 +116,4 @@ public class VectorMapJoinOptimizedCreateHashTable {
     }
     return hashTable;
   }
-
-  /*
-  @Override
-  public com.esotericsoftware.kryo.io.Output getHybridBigTableSpillOutput(int partitionId) {
-
-    HybridHashTableContainer ht = (HybridHashTableContainer) mapJoinTableContainer;
-
-    HashPartition hp = ht.getHashPartitions()[partitionId];
-
-    return hp.getMatchfileOutput();
-  }
-  */
 }

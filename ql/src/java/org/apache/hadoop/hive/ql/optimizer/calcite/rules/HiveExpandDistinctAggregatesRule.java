@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -165,7 +165,7 @@ public final class HiveExpandDistinctAggregatesRule extends RelOptRule {
     final RelMetadataQuery mq = call.getMetadataQuery();
     if ((nonDistinctCount == 0) && (argListSets.size() == 1)) {
       for (Integer arg : argListSets.iterator().next()) {
-        Set<RelColumnOrigin> colOrigs = mq.getColumnOrigins(aggregate, arg);
+        Set<RelColumnOrigin> colOrigs = mq.getColumnOrigins(aggregate.getInput(), arg);
         if (null != colOrigs) {
           for (RelColumnOrigin colOrig : colOrigs) {
             RelOptHiveTable hiveTbl = (RelOptHiveTable)colOrig.getOriginTable();
@@ -327,7 +327,7 @@ public final class HiveExpandDistinctAggregatesRule extends RelOptRule {
     // Create GroupingID column
     AggregateCall aggCall = AggregateCall.create(HiveGroupingID.INSTANCE, false,
         new ImmutableList.Builder<Integer>().build(), -1, this.cluster.getTypeFactory()
-            .createSqlType(SqlTypeName.INTEGER), HiveGroupingID.INSTANCE.getName());
+            .createSqlType(SqlTypeName.BIGINT), HiveGroupingID.INSTANCE.getName());
     aggregateCalls.add(aggCall);
     return new HiveAggregate(cluster, cluster.traitSetOf(HiveRelNode.CONVENTION),
         aggregate.getInput(), groupSet, origGroupSets, aggregateCalls);

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,10 +23,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 
+import com.google.common.collect.ImmutableSet;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.TableType;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Order;
+import org.apache.hadoop.hive.ql.ddl.DDLWork2;
+import org.apache.hadoop.hive.ql.ddl.table.creation.CreateTableDesc;
+import org.apache.hadoop.hive.ql.ddl.view.CreateViewDesc;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -59,7 +63,7 @@ public class ImportTableDesc {
         this.createTblDesc = new CreateTableDesc(dbName,
                 table.getTableName(),
                 false, // isExternal: set to false here, can be overwritten by the IMPORT stmt
-                table.isTemporary(),
+                false,
                 table.getSd().getCols(),
                 table.getPartitionKeys(),
                 table.getSd().getBucketCols(),
@@ -81,7 +85,11 @@ public class ImportTableDesc {
                 null,
                 null,
                 null,
-                null);
+                null,
+            null,
+            null,
+                table.getColStats(),
+                table.getTTable().getWriteId());
         this.createTblDesc.setStoredAsSubDirectories(table.getSd().isStoredAsSubDirectories());
         break;
       case VIEW:
@@ -100,6 +108,10 @@ public class ImportTableDesc {
                   table.getSd().getSerdeInfo().getSerializationLib(),
                   null, // storagehandler passed as table params
                   table.getSd().getSerdeInfo().getParameters());
+          // TODO: If the DB name from the creation metadata for any of the tables has changed,
+          // we should update it. Currently it refers to the source database name.
+          this.createViewDesc.setTablesUsed(table.getCreationMetadata() != null ?
+              table.getCreationMetadata().getTablesUsed() : ImmutableSet.of());
         } else {
           this.createViewDesc = new CreateViewDesc(dbDotView,
                   table.getAllCols(),
@@ -314,10 +326,10 @@ public class ImportTableDesc {
   public Task<? extends Serializable> getCreateTableTask(HashSet<ReadEntity> inputs, HashSet<WriteEntity> outputs,
       HiveConf conf) {
     switch (getDescType()) {
-      case TABLE:
-        return TaskFactory.get(new DDLWork(inputs, outputs, createTblDesc), conf);
-      case VIEW:
-        return TaskFactory.get(new DDLWork(inputs, outputs, createViewDesc), conf);
+    case TABLE:
+      return TaskFactory.get(new DDLWork2(inputs, outputs, createTblDesc), conf);
+    case VIEW:
+      return TaskFactory.get(new DDLWork2(inputs, outputs, createViewDesc), conf);
     }
     return null;
   }
@@ -325,7 +337,9 @@ public class ImportTableDesc {
   /**
    * @return whether this table is actually a view
    */
-  public boolean isView() { return table.isView(); }
+  public boolean isView() {
+    return table.isView();
+  }
 
   public boolean isMaterializedView() {
     return table.isMaterializedView();
@@ -338,5 +352,42 @@ public class ImportTableDesc {
       return TableType.MATERIALIZED_VIEW;
     }
     return TableType.MANAGED_TABLE;
+  }
+
+  public Table toTable(HiveConf conf) throws Exception {
+    switch (getDescType()) {
+      case TABLE:
+        return createTblDesc.toTable(conf);
+      case VIEW:
+        return createViewDesc.toTable(conf);
+      default:
+        return null;
+    }
+  }
+
+  public void setReplWriteId(Long replWriteId) {
+    if (this.createTblDesc != null) {
+      this.createTblDesc.setReplWriteId(replWriteId);
+    }
+  }
+
+  public void setOwnerName(String ownerName) {
+    switch (getDescType()) {
+      case TABLE:
+        createTblDesc.setOwnerName(ownerName);
+        break;
+      case VIEW:
+        createViewDesc.setOwnerName(ownerName);
+        break;
+      default:
+        throw new RuntimeException("Invalid table type : " + getDescType());
+    }
+  }
+
+  public Long getReplWriteId() {
+    if (this.createTblDesc != null) {
+      return this.createTblDesc.getReplWriteId();
+    }
+    return -1L;
   }
 }

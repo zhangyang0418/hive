@@ -58,6 +58,10 @@ POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
 PREHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acid
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acid
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -66,13 +70,17 @@ PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acid
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acid
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acid
 PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -85,7 +93,7 @@ PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acid
 POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -99,8 +107,18 @@ POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 PREHOOK: query: explain update srcpart_acid set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acid
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: query: explain update srcpart_acid set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acid
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -119,18 +137,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: srcpart_acid
+                  filterExpr: (((UDFToInteger(key) = 413) or (UDFToInteger(key) = 43)) and (hr = '11')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 362000 Basic stats: COMPLETE Column stats: PARTIAL
                   Filter Operator
-                    predicate: (UDFToInteger(key)) IN (413, 43) (type: boolean)
-                    Statistics: Num rows: 500 Data size: 181000 Basic stats: COMPLETE Column stats: PARTIAL
+                    predicate: ((UDFToInteger(key) = 413) or (UDFToInteger(key) = 43)) (type: boolean)
+                    Statistics: Num rows: 1000 Data size: 362000 Basic stats: COMPLETE Column stats: PARTIAL
                     Select Operator
-                      expressions: ROW__ID (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), key (type: string), concat(value, 'updated') (type: string), ds (type: string)
+                      expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), key (type: string), concat(value, 'updated') (type: string), ds (type: string)
                       outputColumnNames: _col0, _col1, _col2, _col3
-                      Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                      Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                       Reduce Output Operator
-                        key expressions: _col0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>)
+                        key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         sort order: +
-                        Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                        Map-reduce partition columns: UDFToInteger(_col0) (type: int)
+                        Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                         value expressions: _col1 (type: string), _col2 (type: string), _col3 (type: string)
             Execution mode: llap
             LLAP IO: may be used (ACID table)
@@ -138,12 +158,12 @@ STAGE PLANS:
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string), VALUE._col2 (type: string), '11' (type: string)
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string), VALUE._col2 (type: string), '11' (type: string)
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4
-                Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                  Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                   table:
                       input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -210,12 +230,14 @@ POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 2008-04-09	11	413	val_413updated
 PREHOOK: query: insert into srcpart_acid PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
 POSTHOOK: query: insert into srcpart_acid PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
-POSTHOOK: Lineage: srcpart_acid PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(values__tmp__table__1)values__tmp__table__1.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
-POSTHOOK: Lineage: srcpart_acid PARTITION(ds=2008-04-08,hr=11).value SIMPLE [(values__tmp__table__1)values__tmp__table__1.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
+POSTHOOK: Lineage: srcpart_acid PARTITION(ds=2008-04-08,hr=11).key SCRIPT []
+POSTHOOK: Lineage: srcpart_acid PARTITION(ds=2008-04-08,hr=11).value SCRIPT []
 PREHOOK: query: select ds, hr, key, value from srcpart_acid where cast(key as integer) > 1000 order by ds, hr, cast(key as integer)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acid
@@ -235,9 +257,75 @@ POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 2008-04-08	11	1001	val1001
 2008-04-08	11	1002	val1002
 2008-04-08	11	1003	val1003
+PREHOOK: query: describe formatted srcpart_acid
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@srcpart_acid
+POSTHOOK: query: describe formatted srcpart_acid
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@srcpart_acid
+# col_name            	data_type           	comment             
+key                 	string              	                    
+value               	string              	                    
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+ds                  	string              	                    
+hr                  	string              	                    
+	 	 
+# Detailed Table Information	 	 
+Database:           	default             	 
+#### A masked pattern was here ####
+Retention:          	0                   	 
+#### A masked pattern was here ####
+Table Type:         	MANAGED_TABLE       	 
+Table Parameters:	 	 
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	bucketing_version   	2                   
+	numFiles            	9                   
+	numPartitions       	4                   
+	numRows             	2003                
+	rawDataSize         	0                   
+	totalSize           	18013               
+	transactional       	true                
+	transactional_properties	default             
+#### A masked pattern was here ####
+	 	 
+# Storage Information	 	 
+SerDe Library:      	org.apache.hadoop.hive.ql.io.orc.OrcSerde	 
+InputFormat:        	org.apache.hadoop.hive.ql.io.orc.OrcInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+Storage Desc Params:	 	 
+	serialization.format	1                   
+PREHOOK: query: describe formatted srcpart_acid key
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@srcpart_acid
+POSTHOOK: query: describe formatted srcpart_acid key
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@srcpart_acid
+col_name            	key                 	 	 	 	 	 	 	 	 	 	 
+data_type           	string              	 	 	 	 	 	 	 	 	 	 
+min                 	                    	 	 	 	 	 	 	 	 	 	 
+max                 	                    	 	 	 	 	 	 	 	 	 	 
+num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
+distinct_count      	316                 	 	 	 	 	 	 	 	 	 	 
+avg_col_len         	2.812               	 	 	 	 	 	 	 	 	 	 
+max_col_len         	3                   	 	 	 	 	 	 	 	 	 	 
+num_trues           	                    	 	 	 	 	 	 	 	 	 	 
+num_falses          	                    	 	 	 	 	 	 	 	 	 	 
+bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
+comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
+COLUMN_STATS_ACCURATE	{\"COLUMN_STATS\":{\"key\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
 PREHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acid
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acid
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -246,13 +334,17 @@ PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acid
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acid
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acid
 PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -265,7 +357,7 @@ PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acid PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acid
 POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
@@ -277,10 +369,90 @@ POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
+PREHOOK: query: describe formatted srcpart_acid
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@srcpart_acid
+POSTHOOK: query: describe formatted srcpart_acid
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@srcpart_acid
+# col_name            	data_type           	comment             
+key                 	string              	                    
+value               	string              	                    
+	 	 
+# Partition Information	 	 
+# col_name            	data_type           	comment             
+ds                  	string              	                    
+hr                  	string              	                    
+	 	 
+# Detailed Table Information	 	 
+Database:           	default             	 
+#### A masked pattern was here ####
+Retention:          	0                   	 
+#### A masked pattern was here ####
+Table Type:         	MANAGED_TABLE       	 
+Table Parameters:	 	 
+	COLUMN_STATS_ACCURATE	{\"BASIC_STATS\":\"true\"}
+	bucketing_version   	2                   
+	numFiles            	9                   
+	numPartitions       	4                   
+	numRows             	2003                
+	rawDataSize         	0                   
+	totalSize           	18013               
+	transactional       	true                
+	transactional_properties	default             
+#### A masked pattern was here ####
+	 	 
+# Storage Information	 	 
+SerDe Library:      	org.apache.hadoop.hive.ql.io.orc.OrcSerde	 
+InputFormat:        	org.apache.hadoop.hive.ql.io.orc.OrcInputFormat	 
+OutputFormat:       	org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat	 
+Compressed:         	No                  	 
+Num Buckets:        	-1                  	 
+Bucket Columns:     	[]                  	 
+Sort Columns:       	[]                  	 
+Storage Desc Params:	 	 
+	serialization.format	1                   
+PREHOOK: query: describe formatted srcpart_acid key
+PREHOOK: type: DESCTABLE
+PREHOOK: Input: default@srcpart_acid
+POSTHOOK: query: describe formatted srcpart_acid key
+POSTHOOK: type: DESCTABLE
+POSTHOOK: Input: default@srcpart_acid
+col_name            	key                 	 	 	 	 	 	 	 	 	 	 
+data_type           	string              	 	 	 	 	 	 	 	 	 	 
+min                 	                    	 	 	 	 	 	 	 	 	 	 
+max                 	                    	 	 	 	 	 	 	 	 	 	 
+num_nulls           	0                   	 	 	 	 	 	 	 	 	 	 
+distinct_count      	320                 	 	 	 	 	 	 	 	 	 	 
+avg_col_len         	2.8190854870775346  	 	 	 	 	 	 	 	 	 	 
+max_col_len         	4                   	 	 	 	 	 	 	 	 	 	 
+num_trues           	                    	 	 	 	 	 	 	 	 	 	 
+num_falses          	                    	 	 	 	 	 	 	 	 	 	 
+bitVector           	HL                  	 	 	 	 	 	 	 	 	 	 
+comment             	from deserializer   	 	 	 	 	 	 	 	 	 	 
+COLUMN_STATS_ACCURATE	{\"COLUMN_STATS\":{\"key\":\"true\"}}	 	 	 	 	 	 	 	 	 	 
 PREHOOK: query: explain delete from srcpart_acid where key in( '1001', '213', '43')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acid
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: query: explain delete from srcpart_acid where key in( '1001', '213', '43')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acid
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -299,18 +471,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: srcpart_acid
-                  Statistics: Num rows: 2015 Data size: 916825 Basic stats: COMPLETE Column stats: PARTIAL
+                  filterExpr: (key) IN ('1001', '213', '43') (type: boolean)
+                  Statistics: Num rows: 2003 Data size: 911365 Basic stats: COMPLETE Column stats: PARTIAL
                   Filter Operator
                     predicate: (key) IN ('1001', '213', '43') (type: boolean)
-                    Statistics: Num rows: 20 Data size: 9100 Basic stats: COMPLETE Column stats: PARTIAL
+                    Statistics: Num rows: 19 Data size: 8645 Basic stats: COMPLETE Column stats: PARTIAL
                     Select Operator
-                      expressions: ROW__ID (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), ds (type: string), hr (type: string)
+                      expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), ds (type: string), hr (type: string)
                       outputColumnNames: _col0, _col1, _col2
-                      Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                      Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                       Reduce Output Operator
-                        key expressions: _col0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>)
+                        key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         sort order: +
-                        Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                        Map-reduce partition columns: UDFToInteger(_col0) (type: int)
+                        Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                         value expressions: _col1 (type: string), _col2 (type: string)
             Execution mode: llap
             LLAP IO: may be used (ACID table)
@@ -318,12 +492,12 @@ STAGE PLANS:
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string)
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string)
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                  Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                   table:
                       input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -394,18 +568,10 @@ POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 PREHOOK: query: select count(*) from srcpart_acid
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acid
-PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
-PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
-PREHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acid
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acid
-POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
-POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=11
-POSTHOOK: Input: default@srcpart_acid@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 1990
 PREHOOK: query: merge into srcpart_acid t using (select distinct ds, hr, key, value from srcpart_acid) s
@@ -449,16 +615,14 @@ POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acid@ds=2008-04-09/hr=12
-POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acid)t.FieldSchema(name:ROW__ID, type:struct<transactionId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acid)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acid)t.FieldSchema(name:hr, type:string, comment:null), ]
+POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acid)t.FieldSchema(name:ROW__ID, type:struct<writeId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acid)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acid)t.FieldSchema(name:hr, type:string, comment:null), ]
 PREHOOK: query: select count(*) from srcpart_acid where ds='2008-04-08' and hr=='12'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acid
-PREHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acid where ds='2008-04-08' and hr=='12'
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acid
-POSTHOOK: Input: default@srcpart_acid@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 0
 PREHOOK: query: select ds, hr, key, value from srcpart_acid where value like '%updated by merge'
@@ -555,6 +719,10 @@ POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
 PREHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidb
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidb
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -563,13 +731,17 @@ PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidb
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidb
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidb
 PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -582,7 +754,7 @@ PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidb
 POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -596,8 +768,18 @@ POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 PREHOOK: query: explain update srcpart_acidb set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidb
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 POSTHOOK: query: explain update srcpart_acidb set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidb
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -616,19 +798,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: srcpart_acidb
+                  filterExpr: (((UDFToInteger(key) = 413) or (UDFToInteger(key) = 43)) and (hr = '11')) (type: boolean)
                   Statistics: Num rows: 1000 Data size: 362000 Basic stats: COMPLETE Column stats: PARTIAL
                   Filter Operator
-                    predicate: (UDFToInteger(key)) IN (413, 43) (type: boolean)
-                    Statistics: Num rows: 500 Data size: 181000 Basic stats: COMPLETE Column stats: PARTIAL
+                    predicate: ((UDFToInteger(key) = 413) or (UDFToInteger(key) = 43)) (type: boolean)
+                    Statistics: Num rows: 1000 Data size: 362000 Basic stats: COMPLETE Column stats: PARTIAL
                     Select Operator
-                      expressions: ROW__ID (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), key (type: string), concat(value, 'updated') (type: string), ds (type: string)
+                      expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), key (type: string), concat(value, 'updated') (type: string), ds (type: string)
                       outputColumnNames: _col0, _col1, _col2, _col3
-                      Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                      Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                       Reduce Output Operator
-                        key expressions: _col0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>)
+                        key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         sort order: +
                         Map-reduce partition columns: UDFToInteger(_col0) (type: int)
-                        Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                        Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                         value expressions: _col1 (type: string), _col2 (type: string), _col3 (type: string)
             Execution mode: llap
             LLAP IO: may be used (ACID table)
@@ -636,12 +819,12 @@ STAGE PLANS:
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string), VALUE._col2 (type: string), '11' (type: string)
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string), VALUE._col2 (type: string), '11' (type: string)
                 outputColumnNames: _col0, _col1, _col2, _col3, _col4
-                Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 500 Data size: 308500 Basic stats: COMPLETE Column stats: PARTIAL
+                  Statistics: Num rows: 1000 Data size: 617000 Basic stats: COMPLETE Column stats: PARTIAL
                   table:
                       input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -708,12 +891,14 @@ POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 2008-04-09	11	413	val_413updated
 PREHOOK: query: insert into srcpart_acidb PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
 POSTHOOK: query: insert into srcpart_acidb PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
-POSTHOOK: Lineage: srcpart_acidb PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(values__tmp__table__2)values__tmp__table__2.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
-POSTHOOK: Lineage: srcpart_acidb PARTITION(ds=2008-04-08,hr=11).value SIMPLE [(values__tmp__table__2)values__tmp__table__2.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
+POSTHOOK: Lineage: srcpart_acidb PARTITION(ds=2008-04-08,hr=11).key SCRIPT []
+POSTHOOK: Lineage: srcpart_acidb PARTITION(ds=2008-04-08,hr=11).value SCRIPT []
 PREHOOK: query: select ds, hr, key, value from srcpart_acidb where cast(key as integer) > 1000 order by ds, hr, cast(key as integer)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidb
@@ -736,6 +921,10 @@ POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidb
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidb
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -744,13 +933,17 @@ PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidb
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidb
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidb
 PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -763,7 +956,7 @@ PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidb PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidb
 POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
@@ -777,8 +970,26 @@ POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 PREHOOK: query: explain delete from srcpart_acidb where key in( '1001', '213', '43')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidb
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: query: explain delete from srcpart_acidb where key in( '1001', '213', '43')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidb
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -797,19 +1008,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: srcpart_acidb
-                  Statistics: Num rows: 2015 Data size: 916825 Basic stats: COMPLETE Column stats: PARTIAL
+                  filterExpr: (key) IN ('1001', '213', '43') (type: boolean)
+                  Statistics: Num rows: 2003 Data size: 911365 Basic stats: COMPLETE Column stats: PARTIAL
                   Filter Operator
                     predicate: (key) IN ('1001', '213', '43') (type: boolean)
-                    Statistics: Num rows: 20 Data size: 9100 Basic stats: COMPLETE Column stats: PARTIAL
+                    Statistics: Num rows: 19 Data size: 8645 Basic stats: COMPLETE Column stats: PARTIAL
                     Select Operator
-                      expressions: ROW__ID (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), ds (type: string), hr (type: string)
+                      expressions: ROW__ID (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), ds (type: string), hr (type: string)
                       outputColumnNames: _col0, _col1, _col2
-                      Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                      Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                       Reduce Output Operator
-                        key expressions: _col0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>)
+                        key expressions: _col0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>)
                         sort order: +
                         Map-reduce partition columns: UDFToInteger(_col0) (type: int)
-                        Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                        Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                         value expressions: _col1 (type: string), _col2 (type: string)
             Execution mode: llap
             LLAP IO: may be used (ACID table)
@@ -817,12 +1029,12 @@ STAGE PLANS:
             Execution mode: llap
             Reduce Operator Tree:
               Select Operator
-                expressions: KEY.reducesinkkey0 (type: struct<transactionid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string)
+                expressions: KEY.reducesinkkey0 (type: struct<writeid:bigint,bucketid:int,rowid:bigint>), VALUE._col0 (type: string), VALUE._col1 (type: string)
                 outputColumnNames: _col0, _col1, _col2
-                Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                 File Output Operator
                   compressed: false
-                  Statistics: Num rows: 20 Data size: 8880 Basic stats: COMPLETE Column stats: PARTIAL
+                  Statistics: Num rows: 19 Data size: 8436 Basic stats: COMPLETE Column stats: PARTIAL
                   table:
                       input format: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                       output format: org.apache.hadoop.hive.ql.io.orc.OrcOutputFormat
@@ -893,18 +1105,10 @@ POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 PREHOOK: query: select count(*) from srcpart_acidb
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidb
-PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
-PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
-PREHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidb
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidb
-POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
-POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=11
-POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 1990
 PREHOOK: query: merge into srcpart_acidb t using (select distinct ds, hr, key, value from srcpart_acidb) s
@@ -948,16 +1152,14 @@ POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidb@ds=2008-04-09/hr=12
-POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidb)t.FieldSchema(name:ROW__ID, type:struct<transactionId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidb)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidb)t.FieldSchema(name:hr, type:string, comment:null), ]
+POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidb)t.FieldSchema(name:ROW__ID, type:struct<writeId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidb)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidb)t.FieldSchema(name:hr, type:string, comment:null), ]
 PREHOOK: query: select count(*) from srcpart_acidb where ds='2008-04-08' and hr=='12'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidb
-PREHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidb where ds='2008-04-08' and hr=='12'
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidb
-POSTHOOK: Input: default@srcpart_acidb@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 0
 PREHOOK: query: select ds, hr, key, value from srcpart_acidb where value like '%updated by merge'
@@ -1054,6 +1256,10 @@ POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
 PREHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidv
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidv
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1062,13 +1268,17 @@ PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidv
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidv
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidv
 PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1081,7 +1291,7 @@ PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidv
 POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1096,9 +1306,19 @@ POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: explain vectorization only detail
 update srcpart_acidv set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidv
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 POSTHOOK: query: explain vectorization only detail
 update srcpart_acidv set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidv
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1119,29 +1339,30 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColumnInList(col 5:int, values [413, 43])(children: CastStringToLong(col 0:string) -> 5:int)
+                        predicateExpression: FilterExprOrExpr(children: FilterLongColEqualLongScalar(col 5:int, val 413)(children: CastStringToLong(col 0:string) -> 5:int), FilterLongColEqualLongScalar(col 6:int, val 43)(children: CastStringToLong(col 0:string) -> 6:int))
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [4, 0, 6, 2]
-                          selectExpressions: StringGroupColConcatStringScalar(col 1:string, val updated) -> 6:string
+                          projectedOutputColumnNums: [4, 0, 7, 2]
+                          selectExpressions: StringGroupColConcatStringScalar(col 1:string, val updated) -> 7:string
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [4]
+                            keyColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            valueColumnNums: [0, 6, 2]
+                            partitionColumns: 5:int
+                            valueColumns: 0:string, 7:string, 2:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1153,20 +1374,20 @@ STAGE PLANS:
                     neededVirtualColumns: [ROWID]
                     partitionColumnCount: 2
                     partitionColumns: ds:string, hr:string
-                    scratchColumnTypeNames: [bigint, string]
+                    scratchColumnTypeNames: [bigint, bigint, string]
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 4
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: [string]
             Reduce Operator Tree:
@@ -1223,12 +1444,14 @@ POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 2008-04-09	11	413	val_413updated
 PREHOOK: query: insert into srcpart_acidv PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
 POSTHOOK: query: insert into srcpart_acidv PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
-POSTHOOK: Lineage: srcpart_acidv PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(values__tmp__table__3)values__tmp__table__3.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
-POSTHOOK: Lineage: srcpart_acidv PARTITION(ds=2008-04-08,hr=11).value SIMPLE [(values__tmp__table__3)values__tmp__table__3.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
+POSTHOOK: Lineage: srcpart_acidv PARTITION(ds=2008-04-08,hr=11).key SCRIPT []
+POSTHOOK: Lineage: srcpart_acidv PARTITION(ds=2008-04-08,hr=11).value SCRIPT []
 PREHOOK: query: select ds, hr, key, value from srcpart_acidv where cast(key as integer) > 1000 order by ds, hr, cast(key as integer)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidv
@@ -1251,6 +1474,10 @@ POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidv
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidv
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1259,13 +1486,17 @@ PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidv
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidv
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidv
 PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1278,7 +1509,7 @@ PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidv PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidv
 POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
@@ -1293,9 +1524,27 @@ POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: explain vectorization only detail
 delete from srcpart_acidv where key in( '1001', '213', '43')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidv
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: query: explain vectorization only detail
 delete from srcpart_acidv where key in( '1001', '213', '43')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidv
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1316,7 +1565,7 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
@@ -1327,17 +1576,18 @@ STAGE PLANS:
                           projectedOutputColumnNums: [4, 2, 3]
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [4]
+                            keyColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            valueColumnNums: [2, 3]
+                            partitionColumns: 5:int
+                            valueColumns: 2:string, 3:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1349,20 +1599,20 @@ STAGE PLANS:
                     neededVirtualColumns: [ROWID]
                     partitionColumnCount: 2
                     partitionColumns: ds:string, hr:string
-                    scratchColumnTypeNames: []
+                    scratchColumnTypeNames: [bigint]
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 3
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -1422,18 +1672,10 @@ POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 PREHOOK: query: select count(*) from srcpart_acidv
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidv
-PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
-PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
-PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidv
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidv
-POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
-POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
-POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 1990
 PREHOOK: query: explain vectorization only detail
@@ -1443,6 +1685,21 @@ when matched and s.ds='2008-04-08' and s.hr=='11' and s.key='44' then update set
 when matched and s.ds='2008-04-08' and s.hr=='12' then delete
 when not matched then insert values('this','should','not','be there')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidv
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
+PREHOOK: Output: default@merge_tmp_table
+PREHOOK: Output: default@srcpart_acidv
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: query: explain vectorization only detail
 merge into srcpart_acidv t using (select distinct ds, hr, key, value from srcpart_acidv) s
 on s.ds=t.ds and s.hr=t.hr and s.key=t.key and s.value=t.value
@@ -1450,6 +1707,20 @@ when matched and s.ds='2008-04-08' and s.hr=='11' and s.key='44' then update set
 when matched and s.ds='2008-04-08' and s.hr=='12' then delete
 when not matched then insert values('this','should','not','be there')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidv
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@merge_tmp_table
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1481,7 +1752,7 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Select Vectorization:
                         className: VectorSelectOperator
                         native: true
@@ -1495,18 +1766,17 @@ STAGE PLANS:
                           projectedOutputColumnNums: []
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [0, 1, 2, 3]
+                            keyColumns: 0:string, 1:string, 2:string, 3:string
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            partitionColumnNums: [0, 1, 2, 3]
-                            valueColumnNums: []
+                            partitionColumns: 0:string, 1:string, 2:string, 3:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1522,21 +1792,21 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Reduce Sink Vectorization:
                         className: VectorReduceSinkObjectHashOperator
-                        keyColumnNums: [2, 3, 0, 1]
+                        keyColumns: 2:string, 3:string, 0:string, 1:string
                         native: true
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                        partitionColumnNums: [2, 3, 0, 1]
-                        valueColumnNums: [4]
+                        partitionColumns: 2:string, 3:string, 0:string, 1:string
+                        valueColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1574,11 +1844,10 @@ STAGE PLANS:
                     projectedOutputColumnNums: []
                   Reduce Sink Vectorization:
                       className: VectorReduceSinkObjectHashOperator
-                      keyColumnNums: [0, 1, 2, 3]
+                      keyColumns: 0:string, 1:string, 2:string, 3:string
                       native: true
                       nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                      partitionColumnNums: [0, 1, 2, 3]
-                      valueColumnNums: []
+                      partitionColumns: 0:string, 1:string, 2:string, 3:string
                   Select Vectorization:
                       className: VectorSelectOperator
                       native: true
@@ -1608,19 +1877,22 @@ STAGE PLANS:
                           className: VectorAppMasterEventOperator
                           native: true
         Reducer 3 
+            MergeJoin Vectorization:
+                enabled: false
+                enableConditionsNotMet: Vectorizing MergeJoin Supported IS false
         Reducer 4 
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 3
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -1636,14 +1908,14 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 5
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string, VALUE._col3:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string, VALUE._col3:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -1730,16 +2002,14 @@ POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidv@ds=2008-04-09/hr=12
-POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidv)t.FieldSchema(name:ROW__ID, type:struct<transactionId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidv)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidv)t.FieldSchema(name:hr, type:string, comment:null), ]
+POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidv)t.FieldSchema(name:ROW__ID, type:struct<writeId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidv)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidv)t.FieldSchema(name:hr, type:string, comment:null), ]
 PREHOOK: query: select count(*) from srcpart_acidv where ds='2008-04-08' and hr=='12'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidv
-PREHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidv where ds='2008-04-08' and hr=='12'
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidv
-POSTHOOK: Input: default@srcpart_acidv@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 0
 PREHOOK: query: select ds, hr, key, value from srcpart_acidv where value like '%updated by merge'
@@ -1836,6 +2106,10 @@ POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
 PREHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidvb
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidvb
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -1844,13 +2118,17 @@ PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidvb
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidvb
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidvb
 PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -1863,7 +2141,7 @@ PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidvb
 POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -1878,9 +2156,19 @@ POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: explain vectorization only detail
 update srcpart_acidvb set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidvb
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 POSTHOOK: query: explain vectorization only detail
 update srcpart_acidvb set value = concat(value, 'updated') where cast(key as integer) in(413,43) and hr='11'
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidvb
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1901,30 +2189,30 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
-                        predicateExpression: FilterLongColumnInList(col 5:int, values [413, 43])(children: CastStringToLong(col 0:string) -> 5:int)
+                        predicateExpression: FilterExprOrExpr(children: FilterLongColEqualLongScalar(col 5:int, val 413)(children: CastStringToLong(col 0:string) -> 5:int), FilterLongColEqualLongScalar(col 6:int, val 43)(children: CastStringToLong(col 0:string) -> 6:int))
                       Select Vectorization:
                           className: VectorSelectOperator
                           native: true
-                          projectedOutputColumnNums: [4, 0, 6, 2]
-                          selectExpressions: StringGroupColConcatStringScalar(col 1:string, val updated) -> 6:string
+                          projectedOutputColumnNums: [4, 0, 7, 2]
+                          selectExpressions: StringGroupColConcatStringScalar(col 1:string, val updated) -> 7:string
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [4]
+                            keyColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            partitionColumnNums: [5]
-                            valueColumnNums: [0, 6, 2]
+                            partitionColumns: 5:int
+                            valueColumns: 0:string, 7:string, 2:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -1936,20 +2224,20 @@ STAGE PLANS:
                     neededVirtualColumns: [ROWID]
                     partitionColumnCount: 2
                     partitionColumns: ds:string, hr:string
-                    scratchColumnTypeNames: [bigint, string]
+                    scratchColumnTypeNames: [bigint, bigint, string]
         Reducer 2 
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 4
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: [string]
             Reduce Operator Tree:
@@ -2006,12 +2294,14 @@ POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 2008-04-09	11	413	val_413updated
 PREHOOK: query: insert into srcpart_acidvb PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 PREHOOK: type: QUERY
+PREHOOK: Input: _dummy_database@_dummy_table
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
 POSTHOOK: query: insert into srcpart_acidvb PARTITION (ds='2008-04-08', hr=='11') values ('1001','val1001'),('1002','val1002'),('1003','val1003')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: _dummy_database@_dummy_table
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
-POSTHOOK: Lineage: srcpart_acidvb PARTITION(ds=2008-04-08,hr=11).key SIMPLE [(values__tmp__table__4)values__tmp__table__4.FieldSchema(name:tmp_values_col1, type:string, comment:), ]
-POSTHOOK: Lineage: srcpart_acidvb PARTITION(ds=2008-04-08,hr=11).value SIMPLE [(values__tmp__table__4)values__tmp__table__4.FieldSchema(name:tmp_values_col2, type:string, comment:), ]
+POSTHOOK: Lineage: srcpart_acidvb PARTITION(ds=2008-04-08,hr=11).key SCRIPT []
+POSTHOOK: Lineage: srcpart_acidvb PARTITION(ds=2008-04-08,hr=11).value SCRIPT []
 PREHOOK: query: select ds, hr, key, value from srcpart_acidvb where cast(key as integer) > 1000 order by ds, hr, cast(key as integer)
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidvb
@@ -2034,6 +2324,10 @@ POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidvb
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: Output: default@srcpart_acidvb
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -2042,13 +2336,17 @@ PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidvb
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidvb
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics for columns
-PREHOOK: type: QUERY
+PREHOOK: type: ANALYZE_TABLE
 PREHOOK: Input: default@srcpart_acidvb
 PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
 PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -2061,7 +2359,7 @@ PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: analyze table srcpart_acidvb PARTITION(ds, hr) compute statistics for columns
-POSTHOOK: type: QUERY
+POSTHOOK: type: ANALYZE_TABLE
 POSTHOOK: Input: default@srcpart_acidvb
 POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
 POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
@@ -2076,9 +2374,27 @@ POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: explain vectorization only detail
 delete from srcpart_acidvb where key in( '1001', '213', '43')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidvb
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: query: explain vectorization only detail
 delete from srcpart_acidvb where key in( '1001', '213', '43')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidvb
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -2099,7 +2415,7 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Filter Vectorization:
                         className: VectorFilterOperator
                         native: true
@@ -2110,18 +2426,18 @@ STAGE PLANS:
                           projectedOutputColumnNums: [4, 2, 3]
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [4]
+                            keyColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            partitionColumnNums: [5]
-                            valueColumnNums: [2, 3]
+                            partitionColumns: 5:int
+                            valueColumns: 2:string, 3:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -2139,14 +2455,14 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 3
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -2206,18 +2522,10 @@ POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PREHOOK: query: select count(*) from srcpart_acidvb
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidvb
-PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
-PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
-PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
-PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidvb
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidvb
-POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
-POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
-POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
-POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
 #### A masked pattern was here ####
 1990
 PREHOOK: query: explain vectorization only detail
@@ -2227,6 +2535,21 @@ when matched and s.ds='2008-04-08' and s.hr=='11' and s.key='44' then update set
 when matched and s.ds='2008-04-08' and s.hr=='12' then delete
 when not matched then insert values('this','should','not','be there')
 PREHOOK: type: QUERY
+PREHOOK: Input: default@srcpart_acidvb
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
+PREHOOK: Output: default@merge_tmp_table
+PREHOOK: Output: default@srcpart_acidvb
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
+PREHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: query: explain vectorization only detail
 merge into srcpart_acidvb t using (select distinct ds, hr, key, value from srcpart_acidvb) s
 on s.ds=t.ds and s.hr=t.hr and s.key=t.key and s.value=t.value
@@ -2234,6 +2557,20 @@ when matched and s.ds='2008-04-08' and s.hr=='11' and s.key='44' then update set
 when matched and s.ds='2008-04-08' and s.hr=='12' then delete
 when not matched then insert values('this','should','not','be there')
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@srcpart_acidvb
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@merge_tmp_table
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-08/hr=12
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
+POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -2266,7 +2603,7 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Select Vectorization:
                         className: VectorSelectOperator
                         native: true
@@ -2280,18 +2617,17 @@ STAGE PLANS:
                           projectedOutputColumnNums: []
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkObjectHashOperator
-                            keyColumnNums: [0, 1, 2, 3]
+                            keyColumns: 0:string, 1:string, 2:string, 3:string
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            partitionColumnNums: [0, 1, 2, 3]
-                            valueColumnNums: []
+                            partitionColumns: 0:string, 1:string, 2:string, 3:string
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -2307,21 +2643,21 @@ STAGE PLANS:
             Map Operator Tree:
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:key:string, 1:value:string, 2:ds:string, 3:hr:string, 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                     Reduce Sink Vectorization:
                         className: VectorReduceSinkObjectHashOperator
-                        keyColumnNums: [2, 3, 0, 1]
+                        keyColumns: 2:string, 3:string, 0:string, 1:string
                         native: true
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                        partitionColumnNums: [2, 3, 0, 1]
-                        valueColumnNums: [4]
+                        partitionColumns: 2:string, 3:string, 0:string, 1:string
+                        valueColumns: 4:struct<writeid:bigint,bucketid:int,rowid:bigint>
             Execution mode: vectorized, llap
             LLAP IO: may be used (ACID table)
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: true
                 usesVectorUDFAdaptor: false
@@ -2359,11 +2695,10 @@ STAGE PLANS:
                     projectedOutputColumnNums: []
                   Reduce Sink Vectorization:
                       className: VectorReduceSinkObjectHashOperator
-                      keyColumnNums: [0, 1, 2, 3]
+                      keyColumns: 0:string, 1:string, 2:string, 3:string
                       native: true
                       nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                      partitionColumnNums: [0, 1, 2, 3]
-                      valueColumnNums: []
+                      partitionColumns: 0:string, 1:string, 2:string, 3:string
                   Select Vectorization:
                       className: VectorSelectOperator
                       native: true
@@ -2393,19 +2728,22 @@ STAGE PLANS:
                           className: VectorAppMasterEventOperator
                           native: true
         Reducer 3 
+            MergeJoin Vectorization:
+                enabled: false
+                enableConditionsNotMet: Vectorizing MergeJoin Supported IS false
         Reducer 4 
             Execution mode: vectorized, llap
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 3
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -2421,14 +2759,14 @@ STAGE PLANS:
             Reduce Vectorization:
                 enabled: true
                 enableConditionsMet: hive.vectorized.execution.reduce.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true
-                reduceColumnNullOrder: a
+                reduceColumnNullOrder: z
                 reduceColumnSortOrder: +
                 allNative: false
                 usesVectorUDFAdaptor: false
                 vectorized: true
                 rowBatchContext:
                     dataColumnCount: 5
-                    dataColumns: KEY.reducesinkkey0:struct<transactionid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string, VALUE._col3:string
+                    dataColumns: KEY.reducesinkkey0:struct<writeid:bigint,bucketid:int,rowid:bigint>, VALUE._col0:string, VALUE._col1:string, VALUE._col2:string, VALUE._col3:string
                     partitionColumnCount: 0
                     scratchColumnTypeNames: []
             Reduce Operator Tree:
@@ -2523,16 +2861,14 @@ POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=11
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
 POSTHOOK: Output: default@srcpart_acidvb@ds=2008-04-09/hr=12
-POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidvb)t.FieldSchema(name:ROW__ID, type:struct<transactionId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidvb)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidvb)t.FieldSchema(name:hr, type:string, comment:null), ]
+POSTHOOK: Lineage: merge_tmp_table.val EXPRESSION [(srcpart_acidvb)t.FieldSchema(name:ROW__ID, type:struct<writeId:bigint,bucketId:int,rowId:bigint>, comment:), (srcpart_acidvb)t.FieldSchema(name:ds, type:string, comment:null), (srcpart_acidvb)t.FieldSchema(name:hr, type:string, comment:null), ]
 PREHOOK: query: select count(*) from srcpart_acidvb where ds='2008-04-08' and hr=='12'
 PREHOOK: type: QUERY
 PREHOOK: Input: default@srcpart_acidvb
-PREHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 POSTHOOK: query: select count(*) from srcpart_acidvb where ds='2008-04-08' and hr=='12'
 POSTHOOK: type: QUERY
 POSTHOOK: Input: default@srcpart_acidvb
-POSTHOOK: Input: default@srcpart_acidvb@ds=2008-04-08/hr=12
 #### A masked pattern was here ####
 0
 PREHOOK: query: select ds, hr, key, value from srcpart_acidvb where value like '%updated by merge'

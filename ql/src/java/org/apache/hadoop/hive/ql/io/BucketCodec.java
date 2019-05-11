@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -72,7 +72,7 @@ public enum BucketCodec {
    * by {@link RecordIdentifier} which includes the {@link RecordIdentifier#getBucketProperty()}
    * which has the actual bucket ID in the high order bits.  This scheme also ensures that 
    * {@link org.apache.hadoop.hive.ql.exec.FileSinkOperator#process(Object, int)} works in case
-   * there numBuckets > numReducers.  (The later could be fixed by changing how writers are
+   * there numBuckets &gt; numReducers.  (The later could be fixed by changing how writers are
    * initialized in "if (fpaths.acidLastBucket != bucketNum) {")
    */
   V1(1) {
@@ -105,7 +105,7 @@ public enum BucketCodec {
   private static final int NUM_BUCKET_ID_BITS = 12;
   private static final int NUM_STATEMENT_ID_BITS = 12;
   private static final int MAX_VERSION = (1 << NUM_VERSION_BITS) - 1;
-  private static final int MAX_BUCKET_ID = (1 << NUM_BUCKET_ID_BITS) - 1;
+  public static final int MAX_BUCKET_ID = (1 << NUM_BUCKET_ID_BITS) - 1;
   private static final int MAX_STATEMENT_ID = (1 << NUM_STATEMENT_ID_BITS) - 1;
 
   public static BucketCodec determineVersion(int bucket) {

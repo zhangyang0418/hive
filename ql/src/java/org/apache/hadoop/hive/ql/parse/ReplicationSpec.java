@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -43,7 +43,13 @@ public class ReplicationSpec {
   private boolean isNoop = false;
   private boolean isLazy = false; // lazy mode => we only list files, and expect that the eventual copy will pull data in.
   private boolean isReplace = true; // default is that the import mode is insert overwrite
+  private String validWriteIdList = null; // WriteIds snapshot for replicating ACID/MM tables.
+  //TxnIds snapshot
+  private String validTxnList = null;
   private Type specType = Type.DEFAULT; // DEFAULT means REPL_LOAD or BOOTSTRAP_DUMP or EXPORT
+  private boolean isMigratingToTxnTable = false;
+  private boolean isMigratingToExternalTable = false;
+  private boolean needDupCopyCheck = false;
 
   // Key definitions related to replication
   public enum KEY {
@@ -52,7 +58,9 @@ public class ReplicationSpec {
     CURR_STATE_ID("repl.last.id"),
     NOOP("repl.noop"),
     LAZY("repl.lazy"),
-    IS_REPLACE("repl.is.replace")
+    IS_REPLACE("repl.is.replace"),
+    VALID_WRITEID_LIST("repl.valid.writeid.list"),
+    VALID_TXN_LIST("repl.valid.txnid.list")
     ;
     private final String keyName;
 
@@ -140,6 +148,8 @@ public class ReplicationSpec {
     this.isNoop = Boolean.parseBoolean(keyFetcher.apply(ReplicationSpec.KEY.NOOP.toString()));
     this.isLazy = Boolean.parseBoolean(keyFetcher.apply(ReplicationSpec.KEY.LAZY.toString()));
     this.isReplace = Boolean.parseBoolean(keyFetcher.apply(ReplicationSpec.KEY.IS_REPLACE.toString()));
+    this.validWriteIdList = keyFetcher.apply(ReplicationSpec.KEY.VALID_WRITEID_LIST.toString());
+    this.validTxnList = keyFetcher.apply(KEY.VALID_TXN_LIST.toString());
   }
 
   /**
@@ -200,7 +210,7 @@ public class ReplicationSpec {
   }
 
   /**
-   * Returns a predicate filter to filter an Iterable<Partition> to return all partitions
+   * Returns a predicate filter to filter an Iterable&lt;Partition&gt; to return all partitions
    * that the current replication event specification is allowed to replicate-replace-into
    */
   public Predicate<Partition> allowEventReplacementInto() {
@@ -325,6 +335,36 @@ public class ReplicationSpec {
     this.isLazy = isLazy;
   }
 
+  /**
+   * @return the WriteIds snapshot for the current ACID/MM table being replicated
+   */
+  public String getValidWriteIdList() {
+    return validWriteIdList;
+  }
+
+  /**
+   * @param validWriteIdList WriteIds snapshot for the current ACID/MM table being replicated
+   */
+  public void setValidWriteIdList(String validWriteIdList) {
+    this.validWriteIdList = validWriteIdList;
+  }
+
+  public String getValidTxnList() {
+    return validTxnList;
+  }
+
+  public void setValidTxnList(String validTxnList) {
+    this.validTxnList = validTxnList;
+  }
+
+
+  /**
+   * @return whether the current replication dumped object related to ACID/Mm table
+   */
+  public boolean isTransactionalTableDump() {
+    return (validWriteIdList != null);
+  }
+
   public String get(KEY key) {
     switch (key){
       case REPL_SCOPE:
@@ -346,6 +386,10 @@ public class ReplicationSpec {
         return String.valueOf(isLazy());
       case IS_REPLACE:
         return String.valueOf(isReplace());
+      case VALID_WRITEID_LIST:
+        return getValidWriteIdList();
+      case VALID_TXN_LIST:
+        return getValidTxnList();
     }
     return null;
   }
@@ -360,5 +404,37 @@ public class ReplicationSpec {
     } else {
       return SCOPE.NO_REPL;
     }
+  }
+
+  public boolean isMigratingToTxnTable() {
+    return isMigratingToTxnTable;
+  }
+  public void setMigratingToTxnTable() {
+    isMigratingToTxnTable = true;
+  }
+
+  public boolean isMigratingToExternalTable() {
+    return isMigratingToExternalTable;
+  }
+
+  public void setMigratingToExternalTable() {
+    isMigratingToExternalTable = true;
+  }
+
+  public static void copyLastReplId(Map<String, String> srcParameter, Map<String, String> destParameter) {
+    String lastReplId = srcParameter.get(ReplicationSpec.KEY.CURR_STATE_ID.toString());
+    if (lastReplId != null) {
+      destParameter.put(ReplicationSpec.KEY.CURR_STATE_ID.toString(), lastReplId);
+    }
+  }
+
+  public boolean needDupCopyCheck() {
+    return needDupCopyCheck;
+  }
+
+  public void setNeedDupCopyCheck(boolean isFirstIncPending) {
+    // Duplicate file check during copy is required until after first successful incremental load.
+    // Check HIVE-21197 for more detail.
+    this.needDupCopyCheck = isFirstIncPending;
   }
 }

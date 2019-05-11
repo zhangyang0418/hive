@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -133,7 +133,7 @@ public class VectorFilterOperator extends FilterOperator
         // All are selected, do nothing
     }
     if (vrg.size > 0) {
-      forward(vrg, null, true);
+      vectorForward(vrg);
     }
 
     // Restore the original selected vector

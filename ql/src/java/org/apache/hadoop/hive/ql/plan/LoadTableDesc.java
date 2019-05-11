@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,6 +21,7 @@ package org.apache.hadoop.hive.ql.plan;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.ql.exec.Utilities;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
+import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.plan.Explain.Level;
 
 import java.io.Serializable;
@@ -38,10 +39,13 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
   private ListBucketingCtx lbCtx;
   private boolean inheritTableSpecs = true; //For partitions, flag controlling whether the current
                                             //table specs are to be used
+  private boolean inheritLocation = false; // A silly setting.
   private int stmtId;
-  private Long currentTransactionId;
+  private Long currentWriteId;
+  private boolean isInsertOverwrite;
 
   // TODO: the below seem like they should just be combined into partitionDesc
+  private Table mdTable;
   private org.apache.hadoop.hive.ql.plan.TableDesc table;
   private Map<String, String> partitionSpec; // NOTE: this partitionSpec has to be ordered map
 
@@ -61,7 +65,13 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
      * the file instead of making a duplicate copy.
      * If any file exist while copy, then just overwrite the file
      */
-    OVERWRITE_EXISTING
+    OVERWRITE_EXISTING,
+    /**
+     * No need to move the file, used in case of replication to s3. If load type is set to ignore, then only the file
+     * operations(move/rename) is ignored at load table/partition method. Other operations like statistics update,
+     * event notification happens as usual.
+     */
+    IGNORE
   }
   public LoadTableDesc(final LoadTableDesc o) {
     super(o.getSourcePath(), o.getWriteType());
@@ -70,7 +80,8 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
     this.dpCtx = o.dpCtx;
     this.lbCtx = o.lbCtx;
     this.inheritTableSpecs = o.inheritTableSpecs;
-    this.currentTransactionId = o.currentTransactionId;
+    this.inheritLocation = o.inheritLocation;
+    this.currentWriteId = o.currentWriteId;
     this.table = o.table;
     this.partitionSpec = o.partitionSpec;
   }
@@ -79,13 +90,13 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
       final TableDesc table,
       final Map<String, String> partitionSpec,
       final LoadFileType loadFileType,
-      final AcidUtils.Operation writeType, Long currentTransactionId) {
+      final AcidUtils.Operation writeType, Long currentWriteId) {
     super(sourcePath, writeType);
     if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
       Utilities.FILE_OP_LOGGER.trace("creating part LTD from " + sourcePath + " to "
         + ((table.getProperties() == null) ? "null" : table.getTableName()));
     }
-    init(table, partitionSpec, loadFileType, currentTransactionId);
+    init(table, partitionSpec, loadFileType, currentWriteId);
   }
 
   /**
@@ -94,21 +105,22 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
    * @param table
    * @param partitionSpec
    * @param loadFileType
+   * @param writeId
    */
   public LoadTableDesc(final Path sourcePath,
                        final TableDesc table,
                        final Map<String, String> partitionSpec,
                        final LoadFileType loadFileType,
-                       final Long txnId) {
-    this(sourcePath, table, partitionSpec, loadFileType, AcidUtils.Operation.NOT_ACID, txnId);
+                       final Long writeId) {
+    this(sourcePath, table, partitionSpec, loadFileType, AcidUtils.Operation.NOT_ACID, writeId);
   }
 
   public LoadTableDesc(final Path sourcePath,
       final TableDesc table,
       final Map<String, String> partitionSpec,
-      final AcidUtils.Operation writeType, Long currentTransactionId) {
+      final AcidUtils.Operation writeType, Long currentWriteId) {
     this(sourcePath, table, partitionSpec, LoadFileType.REPLACE_ALL,
-            writeType, currentTransactionId);
+            writeType, currentWriteId);
   }
 
   /**
@@ -119,16 +131,16 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
    */
   public LoadTableDesc(final Path sourcePath,
                        final org.apache.hadoop.hive.ql.plan.TableDesc table,
-                       final Map<String, String> partitionSpec, Long txnId) {
+                       final Map<String, String> partitionSpec) {
     this(sourcePath, table, partitionSpec, LoadFileType.REPLACE_ALL,
-      AcidUtils.Operation.NOT_ACID, txnId);
+      AcidUtils.Operation.NOT_ACID, null);
   }
 
   public LoadTableDesc(final Path sourcePath,
       final TableDesc table,
       final DynamicPartitionCtx dpCtx,
       final AcidUtils.Operation writeType,
-      boolean isReplace, Long txnId) {
+      boolean isReplace, Long writeId) {
     super(sourcePath, writeType);
     if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
       Utilities.FILE_OP_LOGGER.trace("creating LTD from " + sourcePath + " to " + table.getTableName());
@@ -136,9 +148,9 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
     this.dpCtx = dpCtx;
     LoadFileType lft = isReplace ?  LoadFileType.REPLACE_ALL :  LoadFileType.OVERWRITE_EXISTING;
     if (dpCtx != null && dpCtx.getPartSpec() != null && partitionSpec == null) {
-      init(table, dpCtx.getPartSpec(), lft, txnId);
+      init(table, dpCtx.getPartSpec(), lft, writeId);
     } else {
-      init(table, new LinkedHashMap<String, String>(), lft, txnId);
+      init(table, new LinkedHashMap<String, String>(), lft, writeId);
     }
   }
 
@@ -146,11 +158,11 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
       final org.apache.hadoop.hive.ql.plan.TableDesc table,
       final Map<String, String> partitionSpec,
       final LoadFileType loadFileType,
-      Long txnId) {
+      Long writeId) {
     this.table = table;
     this.partitionSpec = partitionSpec;
     this.loadFileType = loadFileType;
-    this.currentTransactionId = txnId;
+    this.currentWriteId = writeId;
   }
 
   @Explain(displayName = "table", explainLevels = { Level.USER, Level.DEFAULT, Level.EXTENDED })
@@ -205,8 +217,22 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
     return inheritTableSpecs;
   }
 
+  public boolean getInheritLocation() {
+    return inheritLocation;
+  }
+
   public void setInheritTableSpecs(boolean inheritTableSpecs) {
-    this.inheritTableSpecs = inheritTableSpecs;
+    // Set inheritLocation if this is set to true explicitly.
+    // TODO: Who actually needs this? Might just be some be pointless legacy code.
+    this.inheritTableSpecs = inheritLocation = inheritTableSpecs;
+  }
+
+  public boolean isInsertOverwrite() {
+    return this.isInsertOverwrite;
+  }
+
+  public void setInsertOverwrite(boolean v) {
+   this.isInsertOverwrite = v;
   }
 
   /**
@@ -223,8 +249,12 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
     this.lbCtx = lbCtx;
   }
 
-  public long getTxnId() {
-    return currentTransactionId == null ? 0 : currentTransactionId;
+  public long getWriteId() {
+    return currentWriteId == null ? 0 : currentWriteId;
+  }
+
+  public void setWriteId(long writeId) {
+    currentWriteId = writeId;
   }
 
   public int getStmtId() {
@@ -233,5 +263,13 @@ public class LoadTableDesc extends LoadDesc implements Serializable {
   //todo: should this not be passed in the c'tor?
   public void setStmtId(int stmtId) {
     this.stmtId = stmtId;
+  }
+
+  public Table getMdTable() {
+    return mdTable;
+  }
+
+  public void setMdTable(Table mdTable) {
+    this.mdTable = mdTable;
   }
 }

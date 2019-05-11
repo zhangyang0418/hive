@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,12 +27,14 @@ import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.history.HiveHistory;
 import org.apache.hadoop.hive.ql.lib.Node;
+import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
 import org.apache.hadoop.hive.ql.session.SessionState.LogHelper;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,7 +69,6 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
   protected static transient Logger LOG = LoggerFactory.getLogger(Task.class);
   protected int taskTag;
   private boolean isLocalMode =false;
-  private boolean retryCmdWhenFail = false;
 
   public static final int NO_TAG = 0;
   public static final int COMMON_JOIN = 1;
@@ -183,7 +184,9 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
 
   protected Hive getHive() {
     try {
-      return Hive.getWithFastCheck(conf);
+      // Hive.getWithFastCheck shouldn't be used here as it always re-opens metastore connection.
+      // The conf object in HMS client is always different from the one used here.
+      return Hive.get(conf);
     } catch (HiveException e) {
       LOG.error(StringUtils.stringifyException(e));
       throw new RuntimeException(e);
@@ -201,6 +204,10 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
       this.setStarted();
       if (hiveHistory != null) {
         hiveHistory.logPlanProgress(queryPlan);
+      }
+
+      if (conf != null) {
+        LOG.debug("Task getting executed using mapred tag : " + conf.get(MRJobConfig.JOB_TAGS));
       }
       int retval = execute(driverContext);
       this.setDone();
@@ -428,6 +435,10 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
     this.conf = conf;
   }
 
+  public HiveConf getConf() {
+    return this.conf;
+  }
+
   public void setWork(T work) {
     this.work = work;
   }
@@ -579,14 +590,6 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
     return false;
   }
 
-  public boolean ifRetryCmdWhenFail() {
-    return retryCmdWhenFail;
-  }
-
-  public void setRetryCmdWhenFail(boolean retryCmdWhenFail) {
-    this.retryCmdWhenFail = retryCmdWhenFail;
-  }
-
   public QueryPlan getQueryPlan() {
     return queryPlan;
   }
@@ -610,11 +613,11 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
   public void shutdown() {
   }
 
-  Throwable getException() {
+  public Throwable getException() {
     return exception;
   }
 
-  protected void setException(Throwable ex) {
+  public void setException(Throwable ex) {
     exception = ex;
   }
 
@@ -653,4 +656,7 @@ public abstract class Task<T extends Serializable> implements Serializable, Node
     return queryState;
   }
 
+  public HiveTxnManager getTxnMgr() {
+    return driverContext.getCtx().getHiveTxnManager();
+  }
 }

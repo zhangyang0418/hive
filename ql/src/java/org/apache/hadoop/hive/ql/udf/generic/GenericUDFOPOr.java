@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -54,7 +54,11 @@ public class GenericUDFOPOr extends GenericUDF {
     }
     boi = new BooleanObjectInspector[arguments.length];
     for (int i = 0; i < arguments.length; i++) {
-      boi[i] = (BooleanObjectInspector) arguments[i];
+      if (!(arguments[i] instanceof BooleanObjectInspector)) {
+        boi[i] = PrimitiveObjectInspectorFactory.writableBooleanObjectInspector;
+      } else {
+        boi[i] = (BooleanObjectInspector) arguments[i];
+      }
     }
     return PrimitiveObjectInspectorFactory.writableBooleanObjectInspector;
   }

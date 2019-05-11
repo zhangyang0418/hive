@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -23,6 +23,7 @@ import static org.apache.hadoop.hive.ql.plan.ReduceSinkDesc.ReducerTraits.UNIFOR
 
 import java.util.*;
 
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.AbstractFileMergeOperator;
@@ -30,6 +31,7 @@ import org.apache.hadoop.hive.ql.exec.AppMasterEventOperator;
 import org.apache.hadoop.hive.ql.exec.FetchTask;
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator;
 import org.apache.hadoop.hive.ql.exec.FilterOperator;
+import org.apache.hadoop.hive.ql.exec.GroupByOperator;
 import org.apache.hadoop.hive.ql.exec.HashTableDummyOperator;
 import org.apache.hadoop.hive.ql.exec.MapJoinOperator;
 import org.apache.hadoop.hive.ql.exec.Operator;
@@ -83,6 +85,7 @@ public class GenTezUtils {
         context.conf.getFloatVar(HiveConf.ConfVars.TEZ_MAX_PARTITION_FACTOR);
     float minPartitionFactor = context.conf.getFloatVar(HiveConf.ConfVars.TEZ_MIN_PARTITION_FACTOR);
     long bytesPerReducer = context.conf.getLongVar(HiveConf.ConfVars.BYTESPERREDUCER);
+    int defaultTinyBufferSize = context.conf.getIntVar(HiveConf.ConfVars.TEZ_SIMPLE_CUSTOM_EDGE_TINY_BUFFER_SIZE_MB);
 
     ReduceWork reduceWork = new ReduceWork(Utilities.REDUCENAME + context.nextSequenceNumber());
     LOG.debug("Adding reduce work (" + reduceWork.getName() + ") for " + root);
@@ -142,6 +145,7 @@ public class GenTezUtils {
       edgeProp = new TezEdgeProperty(edgeType);
       edgeProp.setSlowStart(reduceWork.isSlowStart());
     }
+    edgeProp.setBufferSize(obtainBufferSize(root, reduceSink, defaultTinyBufferSize));
     reduceWork.setEdgePropRef(edgeProp);
 
     tezWork.connect(
@@ -219,7 +223,7 @@ public class GenTezUtils {
     roots.addAll(context.eventOperatorSet);
 
     // need to clone the plan.
-    List<Operator<?>> newRoots = SerializationUtilities.cloneOperatorTree(roots, indexForTezUnion);
+    List<Operator<?>> newRoots = SerializationUtilities.cloneOperatorTree(roots);
 
     // we're cloning the operator plan but we're retaining the original work. That means
     // that root operators have to be replaced with the cloned ops. The replacement map
@@ -276,6 +280,15 @@ public class GenTezUtils {
               rsToSemiJoinBranchInfo.put(rs, newSJInfo);
             }
           }
+          // This TableScanOperator could also be part of other events in eventOperatorSet.
+          for(AppMasterEventOperator event: context.eventOperatorSet) {
+            if(event.getConf() instanceof DynamicPruningEventDesc) {
+              TableScanOperator ts = ((DynamicPruningEventDesc) event.getConf()).getTableScan();
+              if(ts.equals(orig)){
+                ((DynamicPruningEventDesc) event.getConf()).setTableScan((TableScanOperator) newRoot);
+              }
+            }
+          }
         }
         context.rootToWorkMap.remove(orig);
         context.rootToWorkMap.put(newRoot, work);
@@ -289,6 +302,13 @@ public class GenTezUtils {
     operators.addAll(newRoots);
 
     Set<Operator<?>> seen = new HashSet<Operator<?>>();
+
+    Set<FileStatus> fileStatusesToFetch = null;
+    if(context.parseContext.getFetchTask() != null) {
+      // File sink operator keeps a reference to a list of files. This reference needs to be passed on
+      // to other file sink operators which could have been added by removal of Union Operator
+      fileStatusesToFetch = context.parseContext.getFetchTask().getWork().getFilesToFetch();
+    }
 
     while(!operators.isEmpty()) {
       Operator<?> current = operators.pop();
@@ -316,6 +336,7 @@ public class GenTezUtils {
             + desc.getDirName() + "; parent " + path);
         desc.setLinkedFileSink(true);
         desc.setLinkedFileSinkDesc(linked);
+        desc.setFilesToFetch(fileStatusesToFetch);
       }
 
       if (current instanceof AppMasterEventOperator) {
@@ -490,7 +511,7 @@ public class GenTezUtils {
    * Remove an operator branch. When we see a fork, we know it's time to do the removal.
    * @param event the leaf node of which branch to be removed
    */
-  public static void removeBranch(Operator<?> event) {
+  public static Operator<?> removeBranch(Operator<?> event) {
     Operator<?> child = event;
     Operator<?> curr = event;
 
@@ -500,6 +521,8 @@ public class GenTezUtils {
     }
 
     curr.removeChild(child);
+
+    return child;
   }
 
   public static EdgeType determineEdgeType(BaseWork preceedingWork, BaseWork followingWork, ReduceSinkOperator reduceSinkOperator) {
@@ -608,12 +631,12 @@ public class GenTezUtils {
       }
     }
     // Filter operator
-    filterDynamicValuePredicatesCollection = new DynamicValuePredicateContext();
     for (Operator<?> op : ts.getChildOperators()) {
       if (!(op instanceof FilterOperator)) {
         continue;
       }
       FilterDesc filterDesc = ((FilterOperator) op).getConf();
+      filterDynamicValuePredicatesCollection = new DynamicValuePredicateContext();
       collectDynamicValuePredicates(filterDesc.getPredicate(),
               filterDynamicValuePredicatesCollection);
       for (ExprNodeDesc nodeToRemove : filterDynamicValuePredicatesCollection
@@ -768,6 +791,15 @@ public class GenTezUtils {
       this.grandParent = grandParent;
       this.generator = generator;
     }
+
+    public ExprNodeDesc getKeyCol() {
+      ExprNodeDesc keyCol = desc.getTarget();
+      if (keyCol != null) {
+        return keyCol;
+      }
+
+      return generator.getConf().getKeyCols().get(desc.getKeyIndex());
+    }
   }
 
   public static class DynamicPartitionPrunerContext implements NodeProcessorCtx,
@@ -830,4 +862,23 @@ public class GenTezUtils {
     egw.startWalking(startNodes, outputMap);
     return outputMap;
   }
+
+  private static Integer obtainBufferSize(Operator<?> op, ReduceSinkOperator rsOp, int defaultTinyBufferSize) {
+    if (op instanceof GroupByOperator) {
+      GroupByOperator groupByOperator = (GroupByOperator) op;
+      if (groupByOperator.getConf().getKeys().isEmpty() &&
+          groupByOperator.getConf().getMode() == GroupByDesc.Mode.MERGEPARTIAL) {
+        // Check configuration and value is -1, infer value
+        int result = defaultTinyBufferSize == -1 ?
+            (int) Math.ceil((double) groupByOperator.getStatistics().getDataSize() / 1E6) :
+            defaultTinyBufferSize;
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Buffer size for output from operator {} can be set to {}Mb", rsOp, result);
+        }
+        return result;
+      }
+    }
+    return null;
+  }
+
 }

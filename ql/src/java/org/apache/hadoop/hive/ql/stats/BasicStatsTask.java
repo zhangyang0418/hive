@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +19,7 @@
 
 package org.apache.hadoop.hive.ql.stats;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -37,11 +38,13 @@ import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.EnvironmentContext;
 import org.apache.hadoop.hive.metastore.api.MetaException;
+import org.apache.hadoop.hive.metastore.utils.MetaStoreServerUtils;
 import org.apache.hadoop.hive.metastore.utils.MetaStoreUtils;
 import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
@@ -111,25 +114,20 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
   private static class BasicStatsProcessor {
 
     private Partish partish;
-    private FileStatus[] partfileStatus;
+    private List<FileStatus> partfileStatus;
+    private boolean isMissingAcidState = false;
     private BasicStatsWork work;
-    private boolean atomic;
     private boolean followedColStats1;
 
     public BasicStatsProcessor(Partish partish, BasicStatsWork work, HiveConf conf, boolean followedColStats2) {
       this.partish = partish;
       this.work = work;
-      atomic = HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_STATS_ATOMIC);
       followedColStats1 = followedColStats2;
     }
 
     public Object process(StatsAggregator statsAggregator) throws HiveException, MetaException {
       Partish p = partish;
       Map<String, String> parameters = p.getPartParameters();
-      if (p.isAcid()) {
-        StatsSetupConst.setBasicStatsState(parameters, StatsSetupConst.FALSE);
-      }
-
       if (work.isTargetRewritten()) {
         StatsSetupConst.setBasicStatsState(parameters, StatsSetupConst.TRUE);
       }
@@ -141,14 +139,16 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
       if (!work.isExplicitAnalyze() && !followedColStats1) {
         StatsSetupConst.clearColumnStatsState(parameters);
       }
-      // non-partitioned tables:
-      // XXX: I don't aggree with this logic
-      // FIXME: deprecate atomic? what's its purpose?
-      if (!existStats(parameters) && atomic) {
-        return null;
-      }
-      if(partfileStatus == null){
-        LOG.warn("Partition/partfiles is null for: " + partish.getPartition().getSpec());
+
+      if (partfileStatus == null) {
+        // This may happen if ACID state is absent from config.
+        String spec =  partish.getPartition() == null ? partish.getTable().getTableName()
+            :  partish.getPartition().getSpec().toString();
+        LOG.warn("Partition/partfiles is null for: " + spec);
+        if (isMissingAcidState) {
+          MetaStoreServerUtils.clearQuickStats(parameters);
+          return p.getOutput();
+        }
         return null;
       }
 
@@ -160,36 +160,28 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
         StatsSetupConst.setBasicStatsState(parameters, StatsSetupConst.FALSE);
       }
 
-      updateQuickStats(parameters, partfileStatus);
-      if (StatsSetupConst.areBasicStatsUptoDate(parameters)) {
-        if (statsAggregator != null) {
+      MetaStoreServerUtils.populateQuickStats(partfileStatus, parameters);
+
+      if (statsAggregator != null) {
+        // Update stats for transactional tables (MM, or full ACID with overwrite), even
+        // though we are marking stats as not being accurate.
+        if (StatsSetupConst.areBasicStatsUptoDate(parameters) || p.isTransactionalTable()) {
           String prefix = getAggregationPrefix(p.getTable(), p.getPartition());
-          updateStats(statsAggregator, parameters, prefix, atomic);
+          updateStats(statsAggregator, parameters, prefix);
         }
       }
 
       return p.getOutput();
     }
 
-    public void collectFileStatus(Warehouse wh) throws MetaException {
-      Map<String, String> parameters = partish.getPartParameters();
-      if (!existStats(parameters) && atomic) {
-        return;
+    public void collectFileStatus(Warehouse wh, HiveConf conf) throws MetaException, IOException {
+      if (!partish.isTransactionalTable()) {
+        partfileStatus = wh.getFileStatusesForSD(partish.getPartSd());
+      } else {
+        Path path = new Path(partish.getPartSd().getLocation());
+        partfileStatus = AcidUtils.getAcidFilesForStats(partish.getTable(), path, conf, null);
+        isMissingAcidState = true;
       }
-      partfileStatus = wh.getFileStatusesForSD(partish.getPartSd());
-    }
-
-    @Deprecated
-    private boolean existStats(Map<String, String> parameters) {
-      return parameters.containsKey(StatsSetupConst.ROW_COUNT)
-          || parameters.containsKey(StatsSetupConst.NUM_FILES)
-          || parameters.containsKey(StatsSetupConst.TOTAL_SIZE)
-          || parameters.containsKey(StatsSetupConst.RAW_DATA_SIZE)
-          || parameters.containsKey(StatsSetupConst.NUM_PARTITIONS);
-    }
-
-    private void updateQuickStats(Map<String, String> parameters, FileStatus[] partfileStatus) throws MetaException {
-      MetaStoreUtils.populateQuickStats(partfileStatus, parameters);
     }
 
     private String getAggregationPrefix(Table table, Partition partition) throws MetaException {
@@ -211,9 +203,9 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
       return prefix;
     }
 
-    private void updateStats(StatsAggregator statsAggregator, Map<String, String> parameters, String aggKey, boolean atomic) throws HiveException {
-
-      for (String statType : StatsSetupConst.statsRequireCompute) {
+    private void updateStats(StatsAggregator statsAggregator, Map<String, String> parameters,
+        String aggKey) throws HiveException {
+      for (String statType : StatsSetupConst.STATS_REQUIRE_COMPUTE) {
         String value = statsAggregator.aggregateStats(aggKey, statType);
         if (value != null && !value.isEmpty()) {
           long longValue = Long.parseLong(value);
@@ -225,10 +217,6 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
             }
           }
           parameters.put(statType, String.valueOf(longValue));
-        } else {
-          if (atomic) {
-            throw new HiveException(ErrorMsg.STATSAGGREGATOR_MISSED_SOMESTATS, statType);
-          }
         }
       }
     }
@@ -271,13 +259,12 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
         partishes.add(p = new Partish.PTable(table));
 
         BasicStatsProcessor basicStatsProcessor = new BasicStatsProcessor(p, work, conf, followedColStats);
-        basicStatsProcessor.collectFileStatus(wh);
-        Object res = basicStatsProcessor.process(statsAggregator);
-
+        basicStatsProcessor.collectFileStatus(wh, conf);
+        Table res = (Table) basicStatsProcessor.process(statsAggregator);
         if (res == null) {
           return 0;
         }
-        db.alterTable(tableFullName, (Table) res, environmentContext);
+        db.alterTable(tableFullName, res, environmentContext, true);
 
         if (conf.getBoolVar(ConfVars.TEZ_EXEC_SUMMARY)) {
           console.printInfo("Table " + tableFullName + " stats: [" + toString(p.getPartParameters()) + ']');
@@ -305,7 +292,7 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
             futures.add(pool.submit(new Callable<Void>() {
               @Override
               public Void call() throws Exception {
-                bsp.collectFileStatus(wh);
+                bsp.collectFileStatus(wh, conf);
                 return null;
               }
             }));
@@ -345,7 +332,7 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
         }
 
         if (!updates.isEmpty()) {
-          db.alterPartitions(tableFullName, updates, environmentContext);
+          db.alterPartitions(tableFullName, updates, environmentContext, true);
         }
         if (work.isStatsReliable() && updates.size() != processors.size()) {
           LOG.info("Stats should be reliadble...however seems like there were some issue.. => ret 1");
@@ -422,7 +409,7 @@ public class BasicStatsTask implements Serializable, IStatsProcessor {
 
   private String toString(Map<String, String> parameters) {
     StringBuilder builder = new StringBuilder();
-    for (String statType : StatsSetupConst.supportedStats) {
+    for (String statType : StatsSetupConst.SUPPORTED_STATS) {
       String value = parameters.get(statType);
       if (value != null) {
         if (builder.length() > 0) {

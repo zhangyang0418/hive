@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -34,6 +34,8 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.Utilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Conditional task resolution interface. This is invoked at run time to get the
@@ -42,6 +44,8 @@ import org.apache.hadoop.hive.ql.exec.Utilities;
 public class ConditionalResolverMergeFiles implements ConditionalResolver,
     Serializable {
   private static final long serialVersionUID = 1L;
+
+  private static final Logger LOG = LoggerFactory.getLogger(ConditionalResolverMergeFiles.class);
 
   public ConditionalResolverMergeFiles() {
   }
@@ -190,7 +194,7 @@ public class ConditionalResolverMergeFiles implements ConditionalResolver,
         resTsks.add(mvTask);
       }
     } catch (IOException e) {
-      e.printStackTrace();
+      LOG.warn("Exception while getting tasks", e);
     }
 
     // Only one of the tasks should ever be added to resTsks
@@ -231,7 +235,8 @@ public class ConditionalResolverMergeFiles implements ConditionalResolver,
       throws IOException {
     DynamicPartitionCtx dpCtx = ctx.getDPCtx();
     // get list of dynamic partitions
-    FileStatus[] status = HiveStatsUtils.getFileStatusRecurse(dirPath, dpLbLevel, inpFs);
+    List<FileStatus> statusList = HiveStatsUtils.getFileStatusRecurse(dirPath, dpLbLevel, inpFs);
+    FileStatus[] status = statusList.toArray(new FileStatus[statusList.size()]);
 
     // cleanup pathToPartitionInfo
     Map<Path, PartitionDesc> ptpi = work.getPathToPartitionInfo();
@@ -408,7 +413,7 @@ public class ConditionalResolverMergeFiles implements ConditionalResolver,
    */
   private long getMergeSize(FileSystem inpFs, Path dirPath, long avgSize) {
     AverageSize averageSize = getAverageSize(inpFs, dirPath);
-    if (averageSize.getTotalSize() <= 0) {
+    if (averageSize.getTotalSize() < 0) {
       return -1;
     }
 

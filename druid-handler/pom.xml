@@ -19,7 +19,7 @@
   <parent>
     <groupId>org.apache.hive</groupId>
     <artifactId>hive</artifactId>
-    <version>3.0.0-SNAPSHOT</version>
+    <version>4.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -29,13 +29,20 @@
 
   <properties>
     <hive.path.to.root>..</hive.path.to.root>
-    <druid.metamx.util.version>0.27.10</druid.metamx.util.version>
     <druid.guava.version>16.0.1</druid.guava.version>
   </properties>
 
   <dependencies>
     <!-- dependencies are always listed in sorted order by groupId, artifectId -->
     <!-- intra-project -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.dataformat</groupId>
+      <artifactId>jackson-dataformat-smile</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.hive</groupId>
       <artifactId>hive-exec</artifactId>
@@ -79,31 +86,12 @@
       <version>${druid.guava.version}</version>
     </dependency>
     <dependency>
-      <groupId>com.metamx</groupId>
-      <artifactId>java-util</artifactId>
-      <version>${druid.metamx.util.version}</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-core</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-annotations</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.fasterxml.jackson.core</groupId>
-          <artifactId>jackson-databind</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
       <groupId>joda-time</groupId>
       <artifactId>joda-time</artifactId>
       <version>${joda.version}</version>
     </dependency>
     <dependency>
-      <groupId>io.druid</groupId>
+      <groupId>org.apache.druid</groupId>
       <artifactId>druid-server</artifactId>
       <version>${druid.version}</version>
       <exclusions>
@@ -120,13 +108,14 @@
           <artifactId>jackson-databind</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>io.druid</groupId>
+          <groupId>org.apache.druid</groupId>
           <artifactId>druid-aws-common</artifactId>
         </exclusion>
       </exclusions>
+      <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.druid</groupId>
+      <groupId>org.apache.druid</groupId>
       <artifactId>druid-processing</artifactId>
       <version>${druid.version}</version>
       <exclusions>
@@ -136,9 +125,10 @@
           <artifactId>annotations</artifactId>
         </exclusion>
       </exclusions>
+      <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>io.druid.extensions</groupId>
+      <groupId>org.apache.druid.extensions</groupId>
       <artifactId>druid-hdfs-storage</artifactId>
       <version>${druid.version}</version>
       <exclusions>
@@ -154,21 +144,29 @@
           <groupId>com.fasterxml.jackson.core</groupId>
           <artifactId>jackson-databind</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.apache.hadoop</groupId>
+          <artifactId>hadoop-aws</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.amazonaws</groupId>
+          <artifactId>aws-java-sdk-s3</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>io.druid.extensions</groupId>
+      <groupId>org.apache.druid.extensions</groupId>
       <artifactId>mysql-metadata-storage</artifactId>
       <version>${druid.version}</version>
-       <exclusions>
+      <exclusions>
         <exclusion>
           <groupId>mysql</groupId>
           <artifactId>mysql-connector-java</artifactId>
         </exclusion>
       </exclusions>
-   </dependency>
+    </dependency>
     <dependency>
-      <groupId>io.druid.extensions</groupId>
+      <groupId>org.apache.druid.extensions</groupId>
       <artifactId>postgresql-metadata-storage</artifactId>
       <version>${druid.version}</version>
     </dependency>
@@ -188,7 +186,7 @@
           <artifactId>guava</artifactId>
         </exclusion>
         <exclusion>
-          <groupId>commmons-logging</groupId>
+          <groupId>commons-logging</groupId>
           <artifactId>commons-logging</artifactId>
         </exclusion>
         <exclusion>
@@ -242,7 +240,7 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>io.druid</groupId>
+      <groupId>org.apache.druid</groupId>
       <artifactId>druid-indexing-hadoop</artifactId>
       <version>${druid.version}</version>
       <scope>test</scope>
@@ -293,12 +291,8 @@
                   <createDependencyReducedPom>false</createDependencyReducedPom>
                   <relocations>
                     <relocation>
-                      <pattern>io.druid</pattern>
-                      <shadedPattern>org.apache.hive.druid.io.druid</shadedPattern>
-                    </relocation>
-                    <relocation>
-                      <pattern>com.metamx</pattern>
-                      <shadedPattern>org.apache.hive.druid.com.metamx</shadedPattern>
+                      <pattern>org.apache.druid</pattern>
+                      <shadedPattern>org.apache.hive.druid.org.apache.druid</shadedPattern>
                     </relocation>
                     <relocation>
                       <pattern>io.netty</pattern>
@@ -327,9 +321,8 @@
                   </relocations>
                   <artifactSet>
                     <includes>
-                      <include>io.druid:*</include>
-                      <include>io.druid.extensions:*</include>
-                      <include>com.metamx:*</include>
+                      <include>org.apache.druid:*</include>
+                      <include>org.apache.druid.extensions:*</include>
                       <include>io.netty:*</include>
                       <include>org.apache.calcite:*</include>
                       <include>com.fasterxml.jackson.core:*</include>
@@ -342,6 +335,8 @@
                       <include>org.apache.commons:*</include>
                       <include>org.roaringbitmap:*</include>
                       <include>org.apache.derby:*</include>
+                      <include>org.asynchttpclient:*</include>
+                      <include>org.antlr:*</include>
                     </includes>
                   </artifactSet>
                   <filters>
@@ -351,6 +346,7 @@
                         <exclude>META-INF/*.SF</exclude>
                         <exclude>META-INF/*.DSA</exclude>
                         <exclude>META-INF/*.RSA</exclude>
+                        <exclude>static/</exclude>
                       </excludes>
                     </filter>
                   </filters>

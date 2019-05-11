@@ -5,6 +5,7 @@ build-eclipse
 .externalToolBuilders
 .project
 .settings
+.factorypath
 *.launch
 *~
 metastore_db
@@ -31,3 +32,5 @@ itests/hive-blobstore/src/test/resources/blobstore-conf.xml
 .DS_Store
 patchprocess
 standalone-metastore/src/gen/version
+standalone-metastore/metastore-common/src/gen/version
+standalone-metastore/metastore-server/src/gen/version

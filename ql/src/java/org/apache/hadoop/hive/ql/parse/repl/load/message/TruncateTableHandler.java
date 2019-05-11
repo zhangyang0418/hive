@@ -18,14 +18,14 @@
 package org.apache.hadoop.hive.ql.parse.repl.load.message;
 
 import org.apache.hadoop.hive.metastore.messaging.AlterTableMessage;
+import org.apache.hadoop.hive.ql.ddl.DDLWork2;
+import org.apache.hadoop.hive.ql.ddl.table.misc.TruncateTableDesc;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
+import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
-import org.apache.hadoop.hive.ql.plan.DDLWork;
-import org.apache.hadoop.hive.ql.plan.TruncateTableDesc;
 
 import java.io.Serializable;
-import java.util.Collections;
 import java.util.List;
 
 public class TruncateTableHandler extends AbstractMessageHandler {
@@ -38,13 +38,19 @@ public class TruncateTableHandler extends AbstractMessageHandler {
     TruncateTableDesc truncateTableDesc = new TruncateTableDesc(
             actualDbName + "." + actualTblName,
             null, context.eventOnlyReplicationSpec());
-    Task<DDLWork> truncateTableTask = TaskFactory.get(
-        new DDLWork(readEntitySet, writeEntitySet, truncateTableDesc),
-        context.hiveConf);
+    truncateTableDesc.setWriteId(msg.getWriteId());
+    Task<DDLWork2> truncateTableTask = TaskFactory.get(
+        new DDLWork2(readEntitySet, writeEntitySet, truncateTableDesc), context.hiveConf);
 
-    context.log.debug("Added truncate tbl task : {}:{}", truncateTableTask.getId(),
-        truncateTableDesc.getTableName());
+    context.log.debug("Added truncate tbl task : {}:{}:{}", truncateTableTask.getId(),
+        truncateTableDesc.getTableName(), truncateTableDesc.getWriteId());
     updatedMetadata.set(context.dmd.getEventTo().toString(), actualDbName, actualTblName, null);
-    return Collections.singletonList(truncateTableTask);
+
+    try {
+      return ReplUtils.addOpenTxnTaskForMigration(actualDbName, actualTblName,
+              context.hiveConf, updatedMetadata, truncateTableTask, msg.getTableObjBefore());
+    } catch (Exception e) {
+      throw new SemanticException(e.getMessage());
+    }
   }
 }

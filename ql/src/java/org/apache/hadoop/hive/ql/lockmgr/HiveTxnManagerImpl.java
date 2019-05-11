@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,9 +21,17 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.conf.Configurable;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.api.LockResponse;
+import org.apache.hadoop.hive.metastore.api.LockState;
 import org.apache.hadoop.hive.ql.Context;
 import org.apache.hadoop.hive.ql.Driver.LockedDriverState;
+import org.apache.hadoop.hive.ql.ddl.database.LockDatabaseDesc;
+import org.apache.hadoop.hive.ql.ddl.database.UnlockDatabaseDesc;
+import org.apache.hadoop.hive.ql.ddl.table.lock.LockTableDesc;
+import org.apache.hadoop.hive.ql.ddl.table.lock.UnlockTableDesc;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.ErrorMsg;
@@ -32,22 +40,28 @@ import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.plan.LockDatabaseDesc;
-import org.apache.hadoop.hive.ql.plan.LockTableDesc;
-import org.apache.hadoop.hive.ql.plan.UnlockDatabaseDesc;
-import org.apache.hadoop.hive.ql.plan.UnlockTableDesc;
 
 /**
  * An implementation HiveTxnManager that includes internal methods that all
  * transaction managers need to implement but that we don't want to expose to
  * outside.
  */
-abstract class HiveTxnManagerImpl implements HiveTxnManager {
+abstract class HiveTxnManagerImpl implements HiveTxnManager, Configurable {
 
   protected HiveConf conf;
 
   void setHiveConf(HiveConf c) {
-    conf = c;
+    setConf(c);
+  }
+
+  @Override
+  public void setConf(Configuration c) {
+    conf = (HiveConf) c;
+  }
+
+  @Override
+  public Configuration getConf() {
+    return conf;
   }
 
   abstract protected void destruct();
@@ -201,4 +215,11 @@ abstract class HiveTxnManagerImpl implements HiveTxnManager {
     return true;
   }
 
+  @Override
+  public LockResponse acquireMaterializationRebuildLock(String dbName, String tableName, long txnId)
+      throws LockException {
+    // This is default implementation. Locking only works for incremental maintenance
+    // which only works for DB transactional manager, thus we cannot acquire a lock.
+    return new LockResponse(0L, LockState.NOT_ACQUIRED);
+  }
 }

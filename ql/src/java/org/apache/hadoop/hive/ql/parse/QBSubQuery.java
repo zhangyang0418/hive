@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -45,6 +45,8 @@ public class QBSubQuery implements ISubQueryJoinInfo {
     NOT_EXISTS,
     IN,
     NOT_IN,
+    SOME,
+    ALL,
     SCALAR;
 
     public static SubQueryType get(ASTNode opNode) throws SemanticException {
@@ -71,6 +73,10 @@ public class QBSubQuery implements ISubQueryJoinInfo {
         return IN;
       case HiveParser.TOK_SUBQUERY_OP_NOTIN:
         return NOT_IN;
+      case HiveParser.KW_SOME:
+        return SOME;
+      case HiveParser.KW_ALL:
+        return ALL;
       default:
         throw new SemanticException(SemanticAnalyzer.generateErrorMessage(opNode,
             "Operator not supported in SubQuery use."));

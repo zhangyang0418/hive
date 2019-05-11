@@ -1602,18 +1602,300 @@ POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).cint EXPRESSION []
 POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).csmallint EXPRESSION []
 POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).cstring1 EXPRESSION []
 POSTHOOK: Lineage: orc_llap_dim_part PARTITION(ctinyint=20).cvchar1 EXPRESSION []
-PREHOOK: query: drop table llap_temp_table
+PREHOOK: query: drop table llap_temp_table_n0
 PREHOOK: type: DROPTABLE
-POSTHOOK: query: drop table llap_temp_table
+POSTHOOK: query: drop table llap_temp_table_n0
 POSTHOOK: type: DROPTABLE
 PREHOOK: query: explain vectorization detail
 SELECT oft.ctinyint, oft.cint, oft.cchar1, oft.cvchar1 FROM orc_llap_part oft
   INNER JOIN orc_llap_dim_part od ON oft.ctinyint = od.ctinyint
 PREHOOK: type: QUERY
+PREHOOK: Input: default@orc_llap_dim_part
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=11
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=12
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=13
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=14
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=15
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=16
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=17
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=18
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=19
+PREHOOK: Input: default@orc_llap_dim_part@ctinyint=20
+PREHOOK: Input: default@orc_llap_part
+PREHOOK: Input: default@orc_llap_part@ctinyint=-1
+PREHOOK: Input: default@orc_llap_part@ctinyint=-10
+PREHOOK: Input: default@orc_llap_part@ctinyint=-11
+PREHOOK: Input: default@orc_llap_part@ctinyint=-12
+PREHOOK: Input: default@orc_llap_part@ctinyint=-13
+PREHOOK: Input: default@orc_llap_part@ctinyint=-14
+PREHOOK: Input: default@orc_llap_part@ctinyint=-15
+PREHOOK: Input: default@orc_llap_part@ctinyint=-16
+PREHOOK: Input: default@orc_llap_part@ctinyint=-17
+PREHOOK: Input: default@orc_llap_part@ctinyint=-18
+PREHOOK: Input: default@orc_llap_part@ctinyint=-19
+PREHOOK: Input: default@orc_llap_part@ctinyint=-2
+PREHOOK: Input: default@orc_llap_part@ctinyint=-20
+PREHOOK: Input: default@orc_llap_part@ctinyint=-21
+PREHOOK: Input: default@orc_llap_part@ctinyint=-22
+PREHOOK: Input: default@orc_llap_part@ctinyint=-23
+PREHOOK: Input: default@orc_llap_part@ctinyint=-24
+PREHOOK: Input: default@orc_llap_part@ctinyint=-25
+PREHOOK: Input: default@orc_llap_part@ctinyint=-26
+PREHOOK: Input: default@orc_llap_part@ctinyint=-27
+PREHOOK: Input: default@orc_llap_part@ctinyint=-28
+PREHOOK: Input: default@orc_llap_part@ctinyint=-29
+PREHOOK: Input: default@orc_llap_part@ctinyint=-3
+PREHOOK: Input: default@orc_llap_part@ctinyint=-30
+PREHOOK: Input: default@orc_llap_part@ctinyint=-31
+PREHOOK: Input: default@orc_llap_part@ctinyint=-32
+PREHOOK: Input: default@orc_llap_part@ctinyint=-33
+PREHOOK: Input: default@orc_llap_part@ctinyint=-34
+PREHOOK: Input: default@orc_llap_part@ctinyint=-35
+PREHOOK: Input: default@orc_llap_part@ctinyint=-36
+PREHOOK: Input: default@orc_llap_part@ctinyint=-37
+PREHOOK: Input: default@orc_llap_part@ctinyint=-38
+PREHOOK: Input: default@orc_llap_part@ctinyint=-39
+PREHOOK: Input: default@orc_llap_part@ctinyint=-4
+PREHOOK: Input: default@orc_llap_part@ctinyint=-40
+PREHOOK: Input: default@orc_llap_part@ctinyint=-41
+PREHOOK: Input: default@orc_llap_part@ctinyint=-42
+PREHOOK: Input: default@orc_llap_part@ctinyint=-43
+PREHOOK: Input: default@orc_llap_part@ctinyint=-44
+PREHOOK: Input: default@orc_llap_part@ctinyint=-45
+PREHOOK: Input: default@orc_llap_part@ctinyint=-46
+PREHOOK: Input: default@orc_llap_part@ctinyint=-47
+PREHOOK: Input: default@orc_llap_part@ctinyint=-48
+PREHOOK: Input: default@orc_llap_part@ctinyint=-49
+PREHOOK: Input: default@orc_llap_part@ctinyint=-5
+PREHOOK: Input: default@orc_llap_part@ctinyint=-50
+PREHOOK: Input: default@orc_llap_part@ctinyint=-51
+PREHOOK: Input: default@orc_llap_part@ctinyint=-52
+PREHOOK: Input: default@orc_llap_part@ctinyint=-53
+PREHOOK: Input: default@orc_llap_part@ctinyint=-54
+PREHOOK: Input: default@orc_llap_part@ctinyint=-55
+PREHOOK: Input: default@orc_llap_part@ctinyint=-56
+PREHOOK: Input: default@orc_llap_part@ctinyint=-57
+PREHOOK: Input: default@orc_llap_part@ctinyint=-58
+PREHOOK: Input: default@orc_llap_part@ctinyint=-59
+PREHOOK: Input: default@orc_llap_part@ctinyint=-6
+PREHOOK: Input: default@orc_llap_part@ctinyint=-60
+PREHOOK: Input: default@orc_llap_part@ctinyint=-61
+PREHOOK: Input: default@orc_llap_part@ctinyint=-62
+PREHOOK: Input: default@orc_llap_part@ctinyint=-63
+PREHOOK: Input: default@orc_llap_part@ctinyint=-64
+PREHOOK: Input: default@orc_llap_part@ctinyint=-7
+PREHOOK: Input: default@orc_llap_part@ctinyint=-8
+PREHOOK: Input: default@orc_llap_part@ctinyint=-9
+PREHOOK: Input: default@orc_llap_part@ctinyint=0
+PREHOOK: Input: default@orc_llap_part@ctinyint=1
+PREHOOK: Input: default@orc_llap_part@ctinyint=10
+PREHOOK: Input: default@orc_llap_part@ctinyint=11
+PREHOOK: Input: default@orc_llap_part@ctinyint=12
+PREHOOK: Input: default@orc_llap_part@ctinyint=13
+PREHOOK: Input: default@orc_llap_part@ctinyint=14
+PREHOOK: Input: default@orc_llap_part@ctinyint=15
+PREHOOK: Input: default@orc_llap_part@ctinyint=16
+PREHOOK: Input: default@orc_llap_part@ctinyint=17
+PREHOOK: Input: default@orc_llap_part@ctinyint=18
+PREHOOK: Input: default@orc_llap_part@ctinyint=19
+PREHOOK: Input: default@orc_llap_part@ctinyint=2
+PREHOOK: Input: default@orc_llap_part@ctinyint=20
+PREHOOK: Input: default@orc_llap_part@ctinyint=21
+PREHOOK: Input: default@orc_llap_part@ctinyint=22
+PREHOOK: Input: default@orc_llap_part@ctinyint=23
+PREHOOK: Input: default@orc_llap_part@ctinyint=24
+PREHOOK: Input: default@orc_llap_part@ctinyint=25
+PREHOOK: Input: default@orc_llap_part@ctinyint=26
+PREHOOK: Input: default@orc_llap_part@ctinyint=27
+PREHOOK: Input: default@orc_llap_part@ctinyint=28
+PREHOOK: Input: default@orc_llap_part@ctinyint=29
+PREHOOK: Input: default@orc_llap_part@ctinyint=3
+PREHOOK: Input: default@orc_llap_part@ctinyint=30
+PREHOOK: Input: default@orc_llap_part@ctinyint=31
+PREHOOK: Input: default@orc_llap_part@ctinyint=32
+PREHOOK: Input: default@orc_llap_part@ctinyint=33
+PREHOOK: Input: default@orc_llap_part@ctinyint=34
+PREHOOK: Input: default@orc_llap_part@ctinyint=35
+PREHOOK: Input: default@orc_llap_part@ctinyint=36
+PREHOOK: Input: default@orc_llap_part@ctinyint=37
+PREHOOK: Input: default@orc_llap_part@ctinyint=38
+PREHOOK: Input: default@orc_llap_part@ctinyint=39
+PREHOOK: Input: default@orc_llap_part@ctinyint=4
+PREHOOK: Input: default@orc_llap_part@ctinyint=40
+PREHOOK: Input: default@orc_llap_part@ctinyint=41
+PREHOOK: Input: default@orc_llap_part@ctinyint=42
+PREHOOK: Input: default@orc_llap_part@ctinyint=43
+PREHOOK: Input: default@orc_llap_part@ctinyint=44
+PREHOOK: Input: default@orc_llap_part@ctinyint=45
+PREHOOK: Input: default@orc_llap_part@ctinyint=46
+PREHOOK: Input: default@orc_llap_part@ctinyint=47
+PREHOOK: Input: default@orc_llap_part@ctinyint=48
+PREHOOK: Input: default@orc_llap_part@ctinyint=49
+PREHOOK: Input: default@orc_llap_part@ctinyint=5
+PREHOOK: Input: default@orc_llap_part@ctinyint=50
+PREHOOK: Input: default@orc_llap_part@ctinyint=51
+PREHOOK: Input: default@orc_llap_part@ctinyint=52
+PREHOOK: Input: default@orc_llap_part@ctinyint=53
+PREHOOK: Input: default@orc_llap_part@ctinyint=54
+PREHOOK: Input: default@orc_llap_part@ctinyint=55
+PREHOOK: Input: default@orc_llap_part@ctinyint=56
+PREHOOK: Input: default@orc_llap_part@ctinyint=57
+PREHOOK: Input: default@orc_llap_part@ctinyint=58
+PREHOOK: Input: default@orc_llap_part@ctinyint=59
+PREHOOK: Input: default@orc_llap_part@ctinyint=6
+PREHOOK: Input: default@orc_llap_part@ctinyint=60
+PREHOOK: Input: default@orc_llap_part@ctinyint=61
+PREHOOK: Input: default@orc_llap_part@ctinyint=62
+PREHOOK: Input: default@orc_llap_part@ctinyint=7
+PREHOOK: Input: default@orc_llap_part@ctinyint=8
+PREHOOK: Input: default@orc_llap_part@ctinyint=9
+PREHOOK: Input: default@orc_llap_part@ctinyint=__HIVE_DEFAULT_PARTITION__
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization detail
 SELECT oft.ctinyint, oft.cint, oft.cchar1, oft.cvchar1 FROM orc_llap_part oft
   INNER JOIN orc_llap_dim_part od ON oft.ctinyint = od.ctinyint
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@orc_llap_dim_part
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=11
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=12
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=13
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=14
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=15
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=16
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=17
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=18
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=19
+POSTHOOK: Input: default@orc_llap_dim_part@ctinyint=20
+POSTHOOK: Input: default@orc_llap_part
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-1
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-10
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-11
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-12
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-13
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-14
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-15
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-16
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-17
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-18
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-19
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-2
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-20
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-21
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-22
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-23
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-24
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-25
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-26
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-27
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-28
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-29
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-3
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-30
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-31
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-32
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-33
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-34
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-35
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-36
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-37
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-38
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-39
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-4
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-40
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-41
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-42
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-43
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-44
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-45
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-46
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-47
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-48
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-49
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-5
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-50
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-51
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-52
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-53
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-54
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-55
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-56
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-57
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-58
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-59
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-6
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-60
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-61
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-62
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-63
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-64
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-7
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-8
+POSTHOOK: Input: default@orc_llap_part@ctinyint=-9
+POSTHOOK: Input: default@orc_llap_part@ctinyint=0
+POSTHOOK: Input: default@orc_llap_part@ctinyint=1
+POSTHOOK: Input: default@orc_llap_part@ctinyint=10
+POSTHOOK: Input: default@orc_llap_part@ctinyint=11
+POSTHOOK: Input: default@orc_llap_part@ctinyint=12
+POSTHOOK: Input: default@orc_llap_part@ctinyint=13
+POSTHOOK: Input: default@orc_llap_part@ctinyint=14
+POSTHOOK: Input: default@orc_llap_part@ctinyint=15
+POSTHOOK: Input: default@orc_llap_part@ctinyint=16
+POSTHOOK: Input: default@orc_llap_part@ctinyint=17
+POSTHOOK: Input: default@orc_llap_part@ctinyint=18
+POSTHOOK: Input: default@orc_llap_part@ctinyint=19
+POSTHOOK: Input: default@orc_llap_part@ctinyint=2
+POSTHOOK: Input: default@orc_llap_part@ctinyint=20
+POSTHOOK: Input: default@orc_llap_part@ctinyint=21
+POSTHOOK: Input: default@orc_llap_part@ctinyint=22
+POSTHOOK: Input: default@orc_llap_part@ctinyint=23
+POSTHOOK: Input: default@orc_llap_part@ctinyint=24
+POSTHOOK: Input: default@orc_llap_part@ctinyint=25
+POSTHOOK: Input: default@orc_llap_part@ctinyint=26
+POSTHOOK: Input: default@orc_llap_part@ctinyint=27
+POSTHOOK: Input: default@orc_llap_part@ctinyint=28
+POSTHOOK: Input: default@orc_llap_part@ctinyint=29
+POSTHOOK: Input: default@orc_llap_part@ctinyint=3
+POSTHOOK: Input: default@orc_llap_part@ctinyint=30
+POSTHOOK: Input: default@orc_llap_part@ctinyint=31
+POSTHOOK: Input: default@orc_llap_part@ctinyint=32
+POSTHOOK: Input: default@orc_llap_part@ctinyint=33
+POSTHOOK: Input: default@orc_llap_part@ctinyint=34
+POSTHOOK: Input: default@orc_llap_part@ctinyint=35
+POSTHOOK: Input: default@orc_llap_part@ctinyint=36
+POSTHOOK: Input: default@orc_llap_part@ctinyint=37
+POSTHOOK: Input: default@orc_llap_part@ctinyint=38
+POSTHOOK: Input: default@orc_llap_part@ctinyint=39
+POSTHOOK: Input: default@orc_llap_part@ctinyint=4
+POSTHOOK: Input: default@orc_llap_part@ctinyint=40
+POSTHOOK: Input: default@orc_llap_part@ctinyint=41
+POSTHOOK: Input: default@orc_llap_part@ctinyint=42
+POSTHOOK: Input: default@orc_llap_part@ctinyint=43
+POSTHOOK: Input: default@orc_llap_part@ctinyint=44
+POSTHOOK: Input: default@orc_llap_part@ctinyint=45
+POSTHOOK: Input: default@orc_llap_part@ctinyint=46
+POSTHOOK: Input: default@orc_llap_part@ctinyint=47
+POSTHOOK: Input: default@orc_llap_part@ctinyint=48
+POSTHOOK: Input: default@orc_llap_part@ctinyint=49
+POSTHOOK: Input: default@orc_llap_part@ctinyint=5
+POSTHOOK: Input: default@orc_llap_part@ctinyint=50
+POSTHOOK: Input: default@orc_llap_part@ctinyint=51
+POSTHOOK: Input: default@orc_llap_part@ctinyint=52
+POSTHOOK: Input: default@orc_llap_part@ctinyint=53
+POSTHOOK: Input: default@orc_llap_part@ctinyint=54
+POSTHOOK: Input: default@orc_llap_part@ctinyint=55
+POSTHOOK: Input: default@orc_llap_part@ctinyint=56
+POSTHOOK: Input: default@orc_llap_part@ctinyint=57
+POSTHOOK: Input: default@orc_llap_part@ctinyint=58
+POSTHOOK: Input: default@orc_llap_part@ctinyint=59
+POSTHOOK: Input: default@orc_llap_part@ctinyint=6
+POSTHOOK: Input: default@orc_llap_part@ctinyint=60
+POSTHOOK: Input: default@orc_llap_part@ctinyint=61
+POSTHOOK: Input: default@orc_llap_part@ctinyint=62
+POSTHOOK: Input: default@orc_llap_part@ctinyint=7
+POSTHOOK: Input: default@orc_llap_part@ctinyint=8
+POSTHOOK: Input: default@orc_llap_part@ctinyint=9
+POSTHOOK: Input: default@orc_llap_part@ctinyint=__HIVE_DEFAULT_PARTITION__
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -1637,7 +1919,7 @@ STAGE PLANS:
                   Statistics: Num rows: 12288 Data size: 1884148 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Map Join Operator
                     condition map:
                          Inner Join 0 to 1
@@ -1645,13 +1927,15 @@ STAGE PLANS:
                       0 ctinyint (type: tinyint)
                       1 ctinyint (type: tinyint)
                     Map Join Vectorization:
-                        bigTableKeyColumnNums: [10]
-                        bigTableRetainedColumnNums: [1, 6, 7, 10]
-                        bigTableValueColumnNums: [1, 6, 7, 10]
+                        bigTableKeyColumns: 10:tinyint
+                        bigTableRetainColumnNums: [1, 6, 7, 10]
+                        bigTableValueColumns: 1:int, 6:char(255), 7:varchar(255), 10:tinyint
                         className: VectorMapJoinInnerBigOnlyLongOperator
                         native: true
                         nativeConditionsMet: hive.mapjoin.optimized.hashtable IS true, hive.vectorized.execution.mapjoin.native.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, One MapJoin Condition IS true, No nullsafe IS true, Small table vectorizes IS true, Optimized Table and Supports Key Types IS true
-                        projectedOutputColumnNums: [1, 6, 7, 10]
+                        nonOuterSmallTableKeyMapping: []
+                        projectedOutput: 1:int, 6:char(255), 7:varchar(255), 10:tinyint
+                        hashTableImplementationType: OPTIMIZED
                     outputColumnNames: _col1, _col6, _col7, _col10
                     input vertices:
                       1 Map 2
@@ -1679,8 +1963,8 @@ STAGE PLANS:
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1696,21 +1980,20 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: od
-                  Statistics: Num rows: 10 Data size: 26040 Basic stats: COMPLETE Column stats: COMPLETE
+                  Statistics: Num rows: 10 Data size: 120 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:csmallint:smallint, 1:cint:int, 2:cbigint:bigint, 3:cfloat:float, 4:cdouble:double, 5:cstring1:string, 6:cchar1:char(255), 7:cvchar1:varchar(255), 8:cboolean1:boolean, 9:cboolean2:boolean, 10:ctinyint:tinyint, 11:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Reduce Output Operator
                     key expressions: ctinyint (type: tinyint)
                     sort order: +
                     Map-reduce partition columns: ctinyint (type: tinyint)
                     Reduce Sink Vectorization:
                         className: VectorReduceSinkLongOperator
-                        keyColumnNums: [10]
+                        keyColumns: 10:tinyint
                         native: true
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                        valueColumnNums: []
-                    Statistics: Num rows: 10 Data size: 40 Basic stats: COMPLETE Column stats: COMPLETE
+                    Statistics: Num rows: 10 Data size: 120 Basic stats: COMPLETE Column stats: COMPLETE
                   Select Operator
                     expressions: ctinyint (type: tinyint)
                     outputColumnNames: _col0
@@ -1728,9 +2011,10 @@ STAGE PLANS:
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: []
                       keys: _col0 (type: tinyint)
+                      minReductionHashAggr: 0.0
                       mode: hash
                       outputColumnNames: _col0
-                      Statistics: Num rows: 5 Data size: 20 Basic stats: COMPLETE Column stats: COMPLETE
+                      Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                       Dynamic Partitioning Event Operator
                         Target column: ctinyint (tinyint)
                         App Master Event Vectorization:
@@ -1738,15 +2022,15 @@ STAGE PLANS:
                             native: true
                         Target Input: oft
                         Partition key expr: ctinyint
-                        Statistics: Num rows: 5 Data size: 20 Basic stats: COMPLETE Column stats: COMPLETE
+                        Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                         Target Vertex: Map 1
             Execution mode: vectorized, llap
             LLAP IO: all inputs
             Map Vectorization:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-                inputFormatFeatureSupport: []
-                featureSupportInUse: []
+                inputFormatFeatureSupport: [DECIMAL_64]
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: false
@@ -1765,7 +2049,7 @@ STAGE PLANS:
       Processor Tree:
         ListSink
 
-PREHOOK: query: create table llap_temp_table as
+PREHOOK: query: create table llap_temp_table_n0 as
 SELECT oft.ctinyint, oft.cint, oft.cchar1, oft.cvchar1 FROM orc_llap_part oft
   INNER JOIN orc_llap_dim_part od ON oft.ctinyint = od.ctinyint
 PREHOOK: type: CREATETABLE_AS_SELECT
@@ -1910,8 +2194,8 @@ PREHOOK: Input: default@orc_llap_part@ctinyint=8
 PREHOOK: Input: default@orc_llap_part@ctinyint=9
 PREHOOK: Input: default@orc_llap_part@ctinyint=__HIVE_DEFAULT_PARTITION__
 PREHOOK: Output: database:default
-PREHOOK: Output: default@llap_temp_table
-POSTHOOK: query: create table llap_temp_table as
+PREHOOK: Output: default@llap_temp_table_n0
+POSTHOOK: query: create table llap_temp_table_n0 as
 SELECT oft.ctinyint, oft.cint, oft.cchar1, oft.cvchar1 FROM orc_llap_part oft
   INNER JOIN orc_llap_dim_part od ON oft.ctinyint = od.ctinyint
 POSTHOOK: type: CREATETABLE_AS_SELECT
@@ -2056,17 +2340,21 @@ POSTHOOK: Input: default@orc_llap_part@ctinyint=8
 POSTHOOK: Input: default@orc_llap_part@ctinyint=9
 POSTHOOK: Input: default@orc_llap_part@ctinyint=__HIVE_DEFAULT_PARTITION__
 POSTHOOK: Output: database:default
-POSTHOOK: Output: default@llap_temp_table
-POSTHOOK: Lineage: llap_temp_table.cchar1 SIMPLE [(orc_llap_part)oft.FieldSchema(name:cchar1, type:char(255), comment:null), ]
-POSTHOOK: Lineage: llap_temp_table.cint SIMPLE [(orc_llap_part)oft.FieldSchema(name:cint, type:int, comment:null), ]
-POSTHOOK: Lineage: llap_temp_table.ctinyint SIMPLE [(orc_llap_part)oft.FieldSchema(name:ctinyint, type:tinyint, comment:null), ]
-POSTHOOK: Lineage: llap_temp_table.cvchar1 SIMPLE [(orc_llap_part)oft.FieldSchema(name:cvchar1, type:varchar(255), comment:null), ]
+POSTHOOK: Output: default@llap_temp_table_n0
+POSTHOOK: Lineage: llap_temp_table_n0.cchar1 SIMPLE [(orc_llap_part)oft.FieldSchema(name:cchar1, type:char(255), comment:null), ]
+POSTHOOK: Lineage: llap_temp_table_n0.cint SIMPLE [(orc_llap_part)oft.FieldSchema(name:cint, type:int, comment:null), ]
+POSTHOOK: Lineage: llap_temp_table_n0.ctinyint SIMPLE [(orc_llap_part)oft.FieldSchema(name:ctinyint, type:tinyint, comment:null), ]
+POSTHOOK: Lineage: llap_temp_table_n0.cvchar1 SIMPLE [(orc_llap_part)oft.FieldSchema(name:cvchar1, type:varchar(255), comment:null), ]
 PREHOOK: query: explain vectorization detail
-select sum(hash(*)) from llap_temp_table
+select sum(hash(*)) from llap_temp_table_n0
 PREHOOK: type: QUERY
+PREHOOK: Input: default@llap_temp_table_n0
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization detail
-select sum(hash(*)) from llap_temp_table
+select sum(hash(*)) from llap_temp_table_n0
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@llap_temp_table_n0
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -2086,11 +2374,11 @@ STAGE PLANS:
         Map 1 
             Map Operator Tree:
                 TableScan
-                  alias: llap_temp_table
-                  Statistics: Num rows: 1509 Data size: 984410 Basic stats: COMPLETE Column stats: NONE
+                  alias: llap_temp_table_n0
+                  Statistics: Num rows: 1509 Data size: 250448 Basic stats: COMPLETE Column stats: COMPLETE
                   TableScan Vectorization:
                       native: true
-                      vectorizationSchemaColumns: [0:ctinyint:tinyint, 1:cint:int, 2:cchar1:char(255), 3:cvchar1:varchar(255), 4:ROW__ID:struct<transactionid:bigint,bucketid:int,rowid:bigint>]
+                      vectorizationSchemaColumns: [0:ctinyint:tinyint, 1:cint:int, 2:cchar1:char(255), 3:cvchar1:varchar(255), 4:ROW__ID:struct<writeid:bigint,bucketid:int,rowid:bigint>]
                   Select Operator
                     expressions: ctinyint (type: tinyint), cint (type: int), cchar1 (type: char(255)), cvchar1 (type: varchar(255))
                     outputColumnNames: ctinyint, cint, cchar1, cvchar1
@@ -2098,7 +2386,7 @@ STAGE PLANS:
                         className: VectorSelectOperator
                         native: true
                         projectedOutputColumnNums: [0, 1, 2, 3]
-                    Statistics: Num rows: 1509 Data size: 984410 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 1509 Data size: 250448 Basic stats: COMPLETE Column stats: COMPLETE
                     Group By Operator
                       aggregations: sum(hash(ctinyint,cint,cchar1,cvchar1))
                       Group By Vectorization:
@@ -2108,18 +2396,18 @@ STAGE PLANS:
                           native: false
                           vectorProcessingMode: HASH
                           projectedOutputColumnNums: [0]
+                      minReductionHashAggr: 0.0
                       mode: hash
                       outputColumnNames: _col0
-                      Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                      Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                       Reduce Output Operator
                         sort order: 
                         Reduce Sink Vectorization:
                             className: VectorReduceSinkEmptyKeyOperator
-                            keyColumnNums: []
                             native: true
                             nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, hive.execution.engine tez IN [tez, spark] IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
-                            valueColumnNums: [0]
-                        Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                            valueColumns: 0:bigint
+                        Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                         value expressions: _col0 (type: bigint)
             Execution mode: vectorized, llap
             LLAP IO: no inputs
@@ -2127,8 +2415,7 @@ STAGE PLANS:
                 enabled: true
                 enabledConditionsMet: hive.vectorized.use.vector.serde.deserialize IS true
                 inputFormatFeatureSupport: [DECIMAL_64]
-                vectorizationSupportRemovedReasons: [DECIMAL_64 disabled because LLAP is enabled]
-                featureSupportInUse: []
+                featureSupportInUse: [DECIMAL_64]
                 inputFileFormats: org.apache.hadoop.mapred.TextInputFormat
                 allNative: false
                 usesVectorUDFAdaptor: true
@@ -2166,13 +2453,13 @@ STAGE PLANS:
                     projectedOutputColumnNums: [0]
                 mode: mergepartial
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                 File Output Operator
                   compressed: false
                   File Sink Vectorization:
                       className: VectorFileSinkOperator
                       native: false
-                  Statistics: Num rows: 1 Data size: 694 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                       output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -2184,23 +2471,23 @@ STAGE PLANS:
       Processor Tree:
         ListSink
 
-PREHOOK: query: select sum(hash(*)) from llap_temp_table
+PREHOOK: query: select sum(hash(*)) from llap_temp_table_n0
 PREHOOK: type: QUERY
-PREHOOK: Input: default@llap_temp_table
+PREHOOK: Input: default@llap_temp_table_n0
 #### A masked pattern was here ####
-POSTHOOK: query: select sum(hash(*)) from llap_temp_table
+POSTHOOK: query: select sum(hash(*)) from llap_temp_table_n0
 POSTHOOK: type: QUERY
-POSTHOOK: Input: default@llap_temp_table
+POSTHOOK: Input: default@llap_temp_table_n0
 #### A masked pattern was here ####
 -70090855086
-PREHOOK: query: drop table llap_temp_table
+PREHOOK: query: drop table llap_temp_table_n0
 PREHOOK: type: DROPTABLE
-PREHOOK: Input: default@llap_temp_table
-PREHOOK: Output: default@llap_temp_table
-POSTHOOK: query: drop table llap_temp_table
+PREHOOK: Input: default@llap_temp_table_n0
+PREHOOK: Output: default@llap_temp_table_n0
+POSTHOOK: query: drop table llap_temp_table_n0
 POSTHOOK: type: DROPTABLE
-POSTHOOK: Input: default@llap_temp_table
-POSTHOOK: Output: default@llap_temp_table
+POSTHOOK: Input: default@llap_temp_table_n0
+POSTHOOK: Output: default@llap_temp_table_n0
 PREHOOK: query: DROP TABLE orc_llap_part
 PREHOOK: type: DROPTABLE
 PREHOOK: Input: default@orc_llap_part

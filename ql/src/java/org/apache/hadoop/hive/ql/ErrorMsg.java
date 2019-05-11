@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,13 +18,6 @@
 
 package org.apache.hadoop.hive.ql;
 
-import java.io.FileNotFoundException;
-import java.text.MessageFormat;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 import org.antlr.runtime.tree.Tree;
 import org.apache.hadoop.hdfs.protocol.DSQuotaExceededException;
 import org.apache.hadoop.hdfs.protocol.NSQuotaExceededException;
@@ -34,6 +27,13 @@ import org.apache.hadoop.hive.ql.parse.ASTNode;
 import org.apache.hadoop.hive.ql.parse.ASTNodeOrigin;
 import org.apache.hadoop.hive.ql.plan.AlterTableDesc.AlterTableTypes;
 import org.apache.hadoop.security.AccessControlException;
+
+import java.io.FileNotFoundException;
+import java.text.MessageFormat;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * List of all error messages.
@@ -62,7 +62,6 @@ public enum ErrorMsg {
   //========================== 10000 range starts here ========================//
   INVALID_TABLE(10001, "Table not found", "42S02"),
   INVALID_COLUMN(10002, "Invalid column reference"),
-  INVALID_INDEX(10003, "Invalid index"),
   INVALID_TABLE_OR_COLUMN(10004, "Invalid table alias or column reference"),
   AMBIGUOUS_TABLE_OR_COLUMN(10005, "Ambiguous table alias or column reference"),
   INVALID_PARTITION(10006, "Partition not found"),
@@ -94,7 +93,7 @@ public enum ErrorMsg {
   INVALID_MAPINDEX_CONSTANT(10031, "Non-constant expression for map indexes not supported"),
   INVALID_MAPINDEX_TYPE(10032, "MAP key type does not match index expression type"),
   NON_COLLECTION_TYPE(10033, "[] not valid on non-collection types"),
-  SELECT_DISTINCT_WITH_GROUPBY(10034, "SELECT DISTINCT and GROUP BY can not be in the same query"),
+  @Deprecated SELECT_DISTINCT_WITH_GROUPBY(10034, "SELECT DISTINCT and GROUP BY can not be in the same query"),
   COLUMN_REPEATED_IN_PARTITIONING_COLS(10035, "Column repeated in partitioning columns"),
   DUPLICATE_COLUMN_NAMES(10036, "Duplicate column name:"),
   INVALID_BUCKET_NUMBER(10037, "Bucket number should be bigger than zero"),
@@ -114,15 +113,12 @@ public enum ErrorMsg {
   CLUSTERBY_ORDERBY_CONFLICT(10050, "Cannot have both CLUSTER BY and ORDER BY clauses"),
   NO_LIMIT_WITH_ORDERBY(10051, "In strict mode, if ORDER BY is specified, "
       + "LIMIT must also be specified"),
-  NO_CARTESIAN_PRODUCT(10052, "In strict mode, cartesian product is not allowed. "
-      + "If you really want to perform the operation, set hive.mapred.mode=nonstrict"),
   UNION_NOTIN_SUBQ(10053, "Top level UNION is not supported currently; "
       + "use a subquery for the UNION"),
   INVALID_INPUT_FORMAT_TYPE(10054, "Input format must implement InputFormat"),
   INVALID_OUTPUT_FORMAT_TYPE(10055, "Output Format must implement HiveOutputFormat, "
       + "otherwise it should be either IgnoreKeyTextOutputFormat or SequenceFileOutputFormat"),
-  NO_VALID_PARTN(10056, "The query does not reference any valid partition. "
-      + "To run this query, set hive.mapred.mode=nonstrict"),
+  NO_VALID_PARTN(10056, HiveConf.StrictChecks.NO_PARTITIONLESS_MSG),
   NO_OUTER_MAPJOIN(10057, "MAPJOIN cannot be performed with OUTER JOIN"),
   INVALID_MAPJOIN_HINT(10058, "All tables are specified as map-table for join"),
   INVALID_MAPJOIN_TABLE(10059, "Result of a union cannot be a map table"),
@@ -203,15 +199,9 @@ public enum ErrorMsg {
   NEED_TABLE_SPECIFICATION(10117, "Table name could be determined; It should be specified "),
   PARTITION_EXISTS(10118, "Partition already exists"),
   TABLE_DATA_EXISTS(10119, "Table exists and contains data files"),
-  INCOMPATIBLE_SCHEMA(10120, "The existing table is not compatible with the import spec. "),
-  EXIM_FOR_NON_NATIVE(10121, "Export/Import cannot be done for a non-native table. "),
+  INCOMPATIBLE_SCHEMA(10120, "The existing table is not compatible with the Export/Import spec. "),
+  EXIM_FOR_NON_NATIVE(10121, "Export/Import cannot be done for a non-native table."),
   INSERT_INTO_BUCKETIZED_TABLE(10122, "Bucketized tables do not support INSERT INTO:"),
-  NO_COMPARE_BIGINT_STRING(10123, "In strict mode, comparing bigints and strings is not allowed, "
-      + "it may result in a loss of precision. "
-      + "If you really want to perform the operation, set hive.mapred.mode=nonstrict"),
-  NO_COMPARE_BIGINT_DOUBLE(10124, "In strict mode, comparing bigints and doubles is not allowed, "
-      + "it may result in a loss of precision. "
-      + "If you really want to perform the operation, set hive.mapred.mode=nonstrict"),
   PARTSPEC_DIFFER_FROM_SCHEMA(10125, "Partition columns in partition specification are "
       + "not the same as that defined in the table schema. "
       + "The names and orders have to be exactly the same."),
@@ -248,7 +238,6 @@ public enum ErrorMsg {
 
   INVALID_JDO_FILTER_EXPRESSION(10143, "Invalid expression for JDO filter"),
 
-  SHOW_CREATETABLE_INDEX(10144, "SHOW CREATE TABLE does not support tables of type INDEX_TABLE."),
   ALTER_BUCKETNUM_NONBUCKETIZED_TBL(10145, "Table is not bucketized."),
 
   TRUNCATE_FOR_NON_MANAGED_TABLE(10146, "Cannot truncate non-managed table {0}.", true),
@@ -334,8 +323,9 @@ public enum ErrorMsg {
             " A subpartition value is specified without specifying the parent partition's value"),
   TABLES_INCOMPATIBLE_SCHEMAS(10235, "Tables have incompatible schemas and their partitions " +
             " cannot be exchanged."),
+  EXCHANGE_PARTITION_NOT_ALLOWED_WITH_TRANSACTIONAL_TABLES(10236, "Exchange partition is not allowed with "
+          + "transactional tables. Alternatively, shall use load data or insert overwrite to move partitions."),
 
-  TRUNCATE_COLUMN_INDEXED_TABLE(10236, "Can not truncate columns from table with indexes"),
   TRUNCATE_COLUMN_NOT_RC(10237, "Only RCFileFormat supports column truncation."),
   TRUNCATE_COLUMN_ARCHIVED(10238, "Column truncation cannot be performed on archived partitions."),
   TRUNCATE_BUCKETED_COLUMN(10239,
@@ -344,7 +334,7 @@ public enum ErrorMsg {
       "A column on which a partition/table is list bucketed cannot be truncated."),
 
   TABLE_NOT_PARTITIONED(10241, "Table {0} is not a partitioned table", true),
-  DATABSAE_ALREADY_EXISTS(10242, "Database {0} already exists", true),
+  DATABASE_ALREADY_EXISTS(10242, "Database {0} already exists", true),
   CANNOT_REPLACE_COLUMNS(10243, "Replace columns is not supported for table {0}. SerDe may be incompatible.", true),
   BAD_LOCATION_VALUE(10244, "{0}  is not absolute.  Please specify a complete absolute uri."),
   UNSUPPORTED_ALTER_TBL_OP(10245, "{0} alter table options is not supported"),
@@ -396,6 +386,9 @@ public enum ErrorMsg {
   MASKING_FILTERING_ON_ACID_NOT_SUPPORTED(10287,
       "Detected {0}.{1} has row masking/column filtering enabled, " +
       "which is not supported for query involving ACID operations", true),
+  MASKING_FILTERING_ON_MATERIALIZED_VIEWS_SOURCES(10288,
+      "Querying directly materialized view contents is not supported since we detected {0}.{1} " +
+          "used by materialized view has row masking/column filtering enabled", true),
 
   UPDATEDELETE_PARSE_ERROR(10290, "Encountered parse error while parsing rewritten merge/update or " +
       "delete query"),
@@ -435,7 +428,6 @@ public enum ErrorMsg {
       "Grouping sets aggregations (with rollups or cubes) are not allowed when " +
       "HIVEMULTIGROUPBYSINGLEREDUCER is turned on. Set hive.multigroupby.singlereducer=false if you want to use grouping sets"),
   CANNOT_RETRIEVE_TABLE_METADATA(10316, "Error while retrieving table metadata"),
-  CANNOT_DROP_INDEX(10317, "Error while dropping index"),
   INVALID_AST_TREE(10318, "Internal error : Invalid AST"),
   ERROR_SERIALIZE_METASTORE(10319, "Error while serializing the metastore objects"),
   IO_ERROR(10320, "Error while performing IO operation "),
@@ -465,6 +457,20 @@ public enum ErrorMsg {
   HIVE_GROUPING_FUNCTION_EXPR_NOT_IN_GROUPBY(10409, "Expression in GROUPING function not present in GROUP BY"),
   ALTER_TABLE_NON_PARTITIONED_TABLE_CASCADE_NOT_SUPPORTED(10410,
       "Alter table with non-partitioned table does not support cascade"),
+  HIVE_GROUPING_SETS_SIZE_LIMIT(10411,
+    "Grouping sets size cannot be greater than 64"),
+  REBUILD_NO_MATERIALIZED_VIEW(10412, "Rebuild command only valid for materialized views"),
+  LOAD_DATA_ACID_FILE(10413,
+      "\"{0}\" was created by Acid write - it cannot be loaded into anther Acid table",
+      true),
+  ACID_OP_ON_INSERTONLYTRAN_TABLE(10414, "Attempt to do update or delete on table {0} that is " +
+    "insert-only transactional", true),
+  LOAD_DATA_LAUNCH_JOB_IO_ERROR(10415, "Encountered I/O error while parsing rewritten load data into insert query"),
+  LOAD_DATA_LAUNCH_JOB_PARSE_ERROR(10416, "Encountered parse error while parsing rewritten load data into insert query"),
+  RESOURCE_PLAN_ALREADY_EXISTS(10417, "Resource plan {0} already exists", true),
+  RESOURCE_PLAN_NOT_EXISTS(10418, "Resource plan {0} does not exist", true),
+  INCOMPATIBLE_STRUCT(10419, "Incompatible structs.", true),
+  OBJECTNAME_CONTAINS_DOT(10420, "Table or database name may not contain dot(.) character", true),
 
   //========================== 20000 range starts here ========================//
 
@@ -495,9 +501,19 @@ public enum ErrorMsg {
   FILE_NOT_FOUND(20012, "File not found: {0}", "64000", true),
   WRONG_FILE_FORMAT(20013, "Wrong file format. Please check the file's format.", "64000", true),
 
-  SPARK_CREATE_CLIENT_INVALID_QUEUE(20014, "Spark job is submitted to an invalid queue: {0}."
-      + " Please fix and try again.", true),
+  SPARK_CREATE_CLIENT_INVALID_QUEUE(20014, "Spark app for session {0} was submitted to an invalid" +
+          " queue: {1}. Please fix and try again.", true),
   SPARK_RUNTIME_OOM(20015, "Spark job failed because of out of memory."),
+
+  //if the error message is changed for REPL_EVENTS_MISSING_IN_METASTORE, then need modification in getNextNotification
+  //method in HiveMetaStoreClient
+  REPL_EVENTS_MISSING_IN_METASTORE(20016, "Notification events are missing in the meta store."),
+  REPL_BOOTSTRAP_LOAD_PATH_NOT_VALID(20017, "Load path {0} not valid as target database is bootstrapped " +
+          "from some other path : {1}."),
+  REPL_FILE_MISSING_FROM_SRC_AND_CM_PATH(20018, "File is missing from both source and cm path."),
+  REPL_LOAD_PATH_NOT_FOUND(20019, "Load path does not exist."),
+  REPL_DATABASE_IS_NOT_SOURCE_OF_REPLICATION(20020,
+          "Source of replication (repl.source.for) is not set in the database properties."),
 
   // An exception from runtime that will show the full stack to client
   UNRESOLVED_RT_EXCEPTION(29999, "Runtime Error: {0}", "58004", true),
@@ -538,9 +554,6 @@ public enum ErrorMsg {
   STATSAGGREGATOR_SOURCETASK_NULL(30014, "SourceTask of StatsTask should not be null"),
   STATSAGGREGATOR_CONNECTION_ERROR(30015,
       "Stats aggregator of type {0} cannot be connected to", true),
-  STATSAGGREGATOR_MISSED_SOMESTATS(30016,
-      "Stats type {0} is missing from stats aggregator. If you don't want the query " +
-      "to fail because of this, set hive.stats.atomic=false", true),
   STATS_SKIPPING_BY_ERROR(30017, "Skipping stats aggregation by error {0}", true),
 
   INVALID_FILE_FORMAT_IN_LOAD(30019, "The file that you are trying to load does not match the" +
@@ -567,32 +580,39 @@ public enum ErrorMsg {
 
   SPARK_GET_JOB_INFO_TIMEOUT(30036,
       "Spark job timed out after {0} seconds while getting job info", true),
-  SPARK_JOB_MONITOR_TIMEOUT(30037, "Job hasn't been submitted after {0}s." +
+  SPARK_JOB_MONITOR_TIMEOUT(30037, "Job hasn''t been submitted after {0}s." +
       " Aborting it.\nPossible reasons include network issues, " +
       "errors in remote driver or the cluster has no available resources, etc.\n" +
-      "Please check YARN or Spark driver's logs for further information.\n" +
+      "Please check YARN or Spark driver''s logs for further information.\n" +
       "The timeout is controlled by " + HiveConf.ConfVars.SPARK_JOB_MONITOR_TIMEOUT + ".", true),
 
   // Various errors when creating Spark client
   SPARK_CREATE_CLIENT_TIMEOUT(30038,
       "Timed out while creating Spark client for session {0}.", true),
   SPARK_CREATE_CLIENT_QUEUE_FULL(30039,
-      "Failed to create Spark client because job queue is full: {0}.", true),
+      "Failed to create Spark client for session {0} because job queue is full: {1}.", true),
   SPARK_CREATE_CLIENT_INTERRUPTED(30040,
       "Interrupted while creating Spark client for session {0}", true),
   SPARK_CREATE_CLIENT_ERROR(30041,
-      "Failed to create Spark client for Spark session {0}", true),
+      "Failed to create Spark client for Spark session {0}: {1}", true),
   SPARK_CREATE_CLIENT_INVALID_RESOURCE_REQUEST(30042,
-      "Failed to create Spark client due to invalid resource request: {0}", true),
+      "Failed to create Spark client for session {0} due to invalid resource request: {1}", true),
   SPARK_CREATE_CLIENT_CLOSED_SESSION(30043,
       "Cannot create Spark client on a closed session {0}", true),
 
   SPARK_JOB_INTERRUPTED(30044, "Spark job was interrupted while executing"),
+  SPARK_GET_JOB_INFO_INTERRUPTED(30045, "Spark job was interrupted while getting job info"),
+  SPARK_GET_JOB_INFO_EXECUTIONERROR(30046, "Spark job failed in execution while getting job info due to exception {0}"),
+
+  REPL_FILE_SYSTEM_OPERATION_RETRY(30047, "Replication file system operation retry expired."),
+  SPARK_GET_STAGES_INFO_TIMEOUT(30048, "Spark job GetSparkStagesInfoJob timed out after {0} seconds.", true),
+  SPARK_GET_STAGES_INFO_INTERRUPTED(30049, "Spark job GetSparkStagesInfoJob was interrupted."),
+  SPARK_GET_STAGES_INFO_EXECUTIONERROR(30050, "Spark job GetSparkStagesInfoJob failed in execution while getting job info due to exception {0}", true),
 
   //========================== 40000 range starts here ========================//
 
-  SPARK_JOB_RUNTIME_ERROR(40001,
-      "Spark job failed during runtime. Please check stacktrace for the root cause.")
+  SPARK_JOB_RUNTIME_ERROR(40001, "Spark job failed due to: {0}", true),
+  SPARK_TASK_RUNTIME_ERROR(40002, "Spark job failed due to task failures: {0}", true)
   ;
 
   private int errorCode;

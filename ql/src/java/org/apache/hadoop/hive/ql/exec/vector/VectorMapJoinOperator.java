@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,9 +28,12 @@ import org.apache.hadoop.hive.ql.exec.ExprNodeEvaluator;
 import org.apache.hadoop.hive.ql.exec.JoinUtil;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer;
 import org.apache.hadoop.hive.ql.exec.persistence.MapJoinTableContainer.ReusableGetAdaptor;
+import org.apache.hadoop.hive.ql.exec.persistence.MatchTracker;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBase;
+import org.apache.hadoop.hive.ql.exec.vector.wrapper.VectorHashKeyWrapperBatch;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeDesc;
 import org.apache.hadoop.hive.ql.plan.MapJoinDesc;
@@ -69,7 +72,7 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
   // for the inner-loop supper.processOp callbacks
   //
   private transient int batchIndex;
-  private transient VectorHashKeyWrapper[] keyValues;
+  private transient VectorHashKeyWrapperBase[] keyValues;
   private transient VectorHashKeyWrapperBatch keyWrapperBatch;
   private transient VectorExpressionWriter[] keyOutputWriters;
 
@@ -181,17 +184,24 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
     }
     // Now replace the old evaluators with our own
     joinValues[posBigTable] = vectorNodeEvaluators;
-
-    // Filtering is handled in the input batch processing
-    if (filterMaps != null) {
-      filterMaps[posBigTable] = null;
-    }
   }
 
   @Override
   protected JoinUtil.JoinResult setMapJoinKey(ReusableGetAdaptor dest, Object row, byte alias)
       throws HiveException {
     return dest.setFromVector(keyValues[batchIndex], keyOutputWriters, keyWrapperBatch);
+  }
+
+  /*
+   * This variation is for FULL OUTER MapJoin.  It does key match tracking only if the key has
+   * no NULLs.
+   */
+  @Override
+  protected JoinUtil.JoinResult setMapJoinKeyNoNulls(ReusableGetAdaptor dest, Object row, byte alias,
+      MatchTracker matchTracker)
+      throws HiveException {
+    return dest.setFromVectorNoNulls(keyValues[batchIndex], keyOutputWriters, keyWrapperBatch,
+        matchTracker);
   }
 
   @Override
@@ -240,6 +250,11 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
   }
 
   @Override
+  public void closeOp(boolean aborted) throws HiveException {
+    super.closeOp(aborted);
+  }
+
+  @Override
   protected void spillBigTableRow(MapJoinTableContainer hybridHtContainer, Object row)
       throws HiveException {
     // Extract the actual row from row batch
@@ -248,13 +263,14 @@ public class VectorMapJoinOperator extends VectorMapJoinBaseOperator {
     super.spillBigTableRow(hybridHtContainer, actualRow);
   }
 
+  // Only used by spillBigTableRow?
   // Code borrowed from VectorReduceSinkOperator
   private Object[] getRowObject(VectorizedRowBatch vrb, int rowIndex) throws HiveException {
     int batchIndex = rowIndex;
     if (vrb.selectedInUse) {
       batchIndex = vrb.selected[rowIndex];
     }
-    for (int i = 0; i < vrb.projectionSize; i++) {
+    for (int i = 0; i < singleRow.length; i++) {
       ColumnVector vectorColumn = vrb.cols[vrb.projectedColumns[i]];
       if (vectorColumn != null) {
         singleRow[i] = rowWriters[i].writeValue(vectorColumn, batchIndex);

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.Stack;
 
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +44,7 @@ import org.apache.hadoop.hive.ql.plan.StatsWork;
 import org.apache.hadoop.hive.ql.plan.MapWork;
 import org.apache.hadoop.hive.ql.plan.SparkWork;
 import org.apache.hadoop.hive.ql.plan.BasicStatsWork;
+import org.apache.hadoop.hive.ql.stats.BasicStatsNoJobTask;
 import org.apache.hadoop.mapred.InputFormat;
 
 import com.google.common.base.Preconditions;
@@ -96,8 +98,7 @@ public class SparkProcessAnalyzeTable implements NodeProcessor {
       Preconditions.checkArgument(alias != null, "AssertionError: expected alias to be not null");
 
       SparkWork sparkWork = context.currentTask.getWork();
-      if (OrcInputFormat.class.isAssignableFrom(inputFormat) ||
-          MapredParquetInputFormat.class.isAssignableFrom(inputFormat)) {
+      if (BasicStatsNoJobTask.canUseFooterScan(table, inputFormat)) {
         // For ORC & Parquet, all the following statements are the same
         // ANALYZE TABLE T [PARTITION (...)] COMPUTE STATISTICS
         // ANALYZE TABLE T [PARTITION (...)] COMPUTE STATISTICS noscan;
@@ -111,7 +112,7 @@ public class SparkProcessAnalyzeTable implements NodeProcessor {
           PrunedPartitionList partList = new PrunedPartitionList(table, confirmedParts, partCols, false);
           statWork.addInputPartitions(partList.getPartitions());
         }
-        Task<StatsWork> snjTask = TaskFactory.get(statWork, parseContext.getConf());
+        Task<StatsWork> snjTask = TaskFactory.get(statWork);
         snjTask.setParentTasks(null);
         context.rootTasks.remove(context.currentTask);
         context.rootTasks.add(snjTask);
@@ -123,11 +124,12 @@ public class SparkProcessAnalyzeTable implements NodeProcessor {
         // The Spark task is just a simple TableScanOperator
 
         BasicStatsWork basicStatsWork = new BasicStatsWork(table.getTableSpec());
+        basicStatsWork.setIsExplicitAnalyze(true);
         basicStatsWork.setNoScanAnalyzeCommand(parseContext.getQueryProperties().isNoScanAnalyzeCommand());
         StatsWork columnStatsWork = new StatsWork(table, basicStatsWork, parseContext.getConf());
         columnStatsWork.collectStatsFromAggregator(tableScan.getConf());
         columnStatsWork.setSourceTask(context.currentTask);
-        Task<StatsWork> statsTask = TaskFactory.get(columnStatsWork, parseContext.getConf());
+        Task<StatsWork> statsTask = TaskFactory.get(columnStatsWork);
         context.currentTask.addDependentTask(statsTask);
 
         // ANALYZE TABLE T [PARTITION (...)] COMPUTE STATISTICS noscan;

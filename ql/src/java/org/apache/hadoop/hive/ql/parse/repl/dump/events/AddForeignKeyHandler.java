@@ -18,28 +18,29 @@
 package org.apache.hadoop.hive.ql.parse.repl.dump.events;
 
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
-import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.parse.EximUtil;
+import org.apache.hadoop.hive.metastore.messaging.AddForeignKeyMessage;
 import org.apache.hadoop.hive.ql.parse.repl.DumpType;
 import org.apache.hadoop.hive.ql.parse.repl.load.DumpMetaData;
 
-public class AddForeignKeyHandler extends AbstractEventHandler {
+public class AddForeignKeyHandler extends AbstractConstraintEventHandler<AddForeignKeyMessage> {
   AddForeignKeyHandler(NotificationEvent event) {
     super(event);
   }
 
   @Override
+  AddForeignKeyMessage eventMessage(String stringRepresentation) {
+    return deserializer.getAddForeignKeyMessage(stringRepresentation);
+  }
+
+  @Override
   public void handle(Context withinContext) throws Exception {
-    LOG.info("Processing#{} ADD_FOREIGNKEY_MESSAGE message : {}", fromEventId(), event.getMessage());
-
-    if (!EximUtil.tryValidateShouldExportTable(withinContext.db, event.getDbName(), event.getTableName(), withinContext.replicationSpec))
-    {
-      return;
+    LOG.debug("Processing#{} ADD_FOREIGNKEY_MESSAGE message : {}", fromEventId(),
+        eventMessageAsJSON);
+    if (shouldReplicate(withinContext)) {
+      DumpMetaData dmd = withinContext.createDmd(this);
+      dmd.setPayload(eventMessageAsJSON);
+      dmd.write();
     }
-
-    DumpMetaData dmd = withinContext.createDmd(this);
-    dmd.setPayload(event.getMessage());
-    dmd.write();
   }
 
   @Override

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -48,7 +48,7 @@ import jline.console.completer.StringsCompleter;
 import jline.console.history.MemoryHistory;
 import org.apache.hadoop.hive.conf.HiveConf;
 
-class BeeLineOpts implements Completer {
+public class BeeLineOpts implements Completer {
   public static final int DEFAULT_MAX_WIDTH = 80;
   public static final int DEFAULT_MAX_HEIGHT = 80;
   public static final int DEFAULT_HEADER_INTERVAL = 100;
@@ -70,6 +70,7 @@ class BeeLineOpts implements Completer {
   private boolean silent = false;
   private boolean color = false;
   private boolean showHeader = true;
+  private boolean escapeCRLF = false;
   private boolean showDbInPrompt = false;
   private int headerInterval = 100;
   private boolean fastConnect = true;
@@ -113,6 +114,7 @@ class BeeLineOpts implements Completer {
   private Map<String, String> hiveVariables = new HashMap<String, String>();
   private Map<String, String> hiveConfVariables = new HashMap<String, String>();
   private boolean helpAsked;
+  private boolean beelineSiteUrlsAsked;
 
   private String lastConnectedUrl = null;
 
@@ -495,6 +497,22 @@ class BeeLineOpts implements Completer {
     }
   }
 
+  public void setEscapeCRLF(boolean escapeCRLF) {
+    this.escapeCRLF = escapeCRLF;
+  }
+
+  public boolean getEscapeCRLF() {
+    if (beeLine.isBeeLine()) {
+      return escapeCRLF;
+    } else { //hive cli
+      if(conf != null) {
+        return HiveConf.getBoolVar(conf, HiveConf.ConfVars.HIVE_CLI_PRINT_ESCAPE_CRLF);
+      } else {
+        return false;
+      }
+    }
+  }
+
   public void setShowDbInPrompt(boolean showDbInPrompt) {
     this.showDbInPrompt = showDbInPrompt;
   }
@@ -662,7 +680,16 @@ class BeeLineOpts implements Completer {
   public boolean isHelpAsked() {
     return helpAsked;
   }
+  
+  public void setBeelineSiteUrlsAsked(boolean beelineSiteUrlsAsked) {
+    this.beelineSiteUrlsAsked = beelineSiteUrlsAsked;
+  }
 
+  public boolean isBeelineSiteUrlsAsked() {
+    return beelineSiteUrlsAsked;
+  }
+
+  
   public String getLastConnectedUrl(){
     return lastConnectedUrl;
   }

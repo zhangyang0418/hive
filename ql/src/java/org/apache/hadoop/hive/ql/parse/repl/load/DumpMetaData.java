@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -78,7 +78,6 @@ public class DumpMetaData {
             Long.valueOf(lineContents[2]),
             new Path(lineContents[3]));
         setPayload(lineContents[4].equals(Utilities.nullStringOutput) ? null : lineContents[4]);
-        ReplChangeManager.setCmRoot(cmRoot);
       } else {
         throw new IOException(
             "Unable to read valid values from dumpFile:" + dumpFile.toUri().toString());

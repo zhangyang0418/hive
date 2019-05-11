@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -115,31 +115,50 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
   @Override
   public void process(Object row, int tag) throws HiveException {
     if (rowLimit >= 0) {
-      if (vectorized) {
-        VectorizedRowBatch batch = (VectorizedRowBatch) row;
-        if (currCount >= rowLimit) {
-          setDone(true);
-          return;
-        }
-        if (currCount + batch.size > rowLimit) {
-          batch.size = rowLimit - currCount;
-        }
-        currCount += batch.size;
-      } else if (currCount++ >= rowLimit) {
-        setDone(true);
+      if (checkSetDone(row, tag)) {
         return;
       }
     }
     if (conf != null && conf.isGatherStats()) {
       gatherStats(row);
     }
-    forward(row, inputObjInspectors[tag], vectorized);
+    if (vectorized) {
+      vectorForward((VectorizedRowBatch) row);
+    } else {
+      forward(row, inputObjInspectors[tag]);
+    }
+  }
+
+  private boolean checkSetDone(Object row, int tag) {
+    if (row instanceof VectorizedRowBatch) {
+      // We need to check with 'instanceof' instead of just checking
+      // vectorized because the row can be a VectorizedRowBatch when
+      // FetchOptimizer kicks in even if the operator pipeline is not
+      // vectorized
+      VectorizedRowBatch batch = (VectorizedRowBatch) row;
+      if (currCount >= rowLimit) {
+        setDone(true);
+        return true;
+      }
+      if (currCount + batch.size > rowLimit) {
+        batch.size = rowLimit - currCount;
+      }
+      currCount += batch.size;
+    } else if (currCount++ >= rowLimit) {
+      setDone(true);
+      return true;
+    }
+    return false;
   }
 
   // Change the table partition for collecting stats
   @Override
   public void cleanUpInputFileChangedOp() throws HiveException {
     inputFileChanged = true;
+    updateFileId();
+  }
+
+  private void updateFileId() {
     // If the file name to bucket number mapping is maintained, store the bucket number
     // in the execution context. This is needed for the following scenario:
     // insert overwrite table T1 select * from T2;
@@ -271,6 +290,9 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
 
   @Override
   public void closeOp(boolean abort) throws HiveException {
+    if (getExecContext() != null && getExecContext().getFileId() == null) {
+      updateFileId();
+    }
     if (conf != null) {
       if (conf.isGatherStats() && stats.size() != 0) {
         publishStats();
@@ -338,6 +360,7 @@ public class TableScanOperator extends Operator<TableScanDesc> implements
     StatsPublisher statsPublisher = Utilities.getStatsPublisher(jc);
     StatsCollectionContext sc = new StatsCollectionContext(jc);
     sc.setStatsTmpDir(conf.getTmpStatsDir());
+    sc.setContextSuffix(getOperatorId());
     if (!statsPublisher.connect(sc)) {
       // just return, stats gathering should not block the main query.
       if (LOG.isInfoEnabled()) {

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -262,7 +262,7 @@ public class ReduceRecordProcessor extends RecordProcessor {
             e.getMessage());
         throw (InterruptedException) e;
       } else {
-        throw new RuntimeException("Reduce operator initialization failed", e);
+        throw new RuntimeException(redWork.getName() + " operator initialization failed", e);
       }
     }
 

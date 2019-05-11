@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -46,7 +46,7 @@ import org.apache.hive.common.util.AnnotationUtils;
  * accept arguments of complex types, and return complex types. 2. It can accept
  * variable length of arguments. 3. It can accept an infinite number of function
  * signature - for example, it's easy to write a GenericUDAF that accepts
- * array<int>, array<array<int>> and so on (arbitrary levels of nesting).
+ * array&lt;int&gt;, array&lt;array&lt;int&gt;&gt; and so on (arbitrary levels of nesting).
  */
 @InterfaceAudience.Public
 @InterfaceStability.Stable
@@ -67,6 +67,17 @@ public abstract class GenericUDAFEvaluator implements Closeable {
       return annotation != null && annotation.estimable();
     }
     return false;
+  }
+
+  /**
+   * Although similar to AbstractAggregationBuffer::estimate(), it differs from it in 2 aspects
+   * 1) This avoids creation of AggregationBuffer which may result in large memory allocation
+   * 2) This is used only while compiling query as oppose to AbstractAggregationBuffer version
+   * which may be used in both runtime as well as compile time.
+   * @return
+   */
+  public int estimate() {
+    return -1;
   }
 
   /**
@@ -138,6 +149,7 @@ public abstract class GenericUDAFEvaluator implements Closeable {
     // This function should be overriden in every sub class
     // And the sub class should call super.init(m, parameters) to get mode set.
     mode = m;
+    partitionEvaluator = null;
     return null;
   }
 
@@ -293,6 +305,7 @@ public abstract class GenericUDAFEvaluator implements Closeable {
    * @param partition   the partition data
    * @param parameters  the list of the expressions in the function
    * @param outputOI    the output object inspector
+   * @param nullsLast   the nulls last configuration
    * @return            the evaluator, default to BasePartitionEvaluator which
    *                    implements the naive approach
    */
@@ -300,9 +313,10 @@ public abstract class GenericUDAFEvaluator implements Closeable {
       WindowFrameDef winFrame,
       PTFPartition partition,
       List<PTFExpressionDef> parameters,
-      ObjectInspector outputOI) {
+      ObjectInspector outputOI, boolean nullsLast) {
     if (partitionEvaluator == null) {
-      partitionEvaluator = createPartitionEvaluator(winFrame, partition, parameters, outputOI);
+      partitionEvaluator = createPartitionEvaluator(winFrame, partition, parameters, outputOI,
+          nullsLast);
     }
 
     return partitionEvaluator;
@@ -316,7 +330,8 @@ public abstract class GenericUDAFEvaluator implements Closeable {
       WindowFrameDef winFrame,
       PTFPartition partition,
       List<PTFExpressionDef> parameters,
-      ObjectInspector outputOI) {
-    return new BasePartitionEvaluator(this, winFrame, partition, parameters, outputOI);
+      ObjectInspector outputOI,
+      boolean nullsLast) {
+    return new BasePartitionEvaluator(this, winFrame, partition, parameters, outputOI, nullsLast);
   }
 }

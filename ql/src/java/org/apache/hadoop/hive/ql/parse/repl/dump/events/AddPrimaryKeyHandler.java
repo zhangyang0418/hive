@@ -18,28 +18,30 @@
 package org.apache.hadoop.hive.ql.parse.repl.dump.events;
 
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
-import org.apache.hadoop.hive.ql.metadata.Table;
-import org.apache.hadoop.hive.ql.parse.EximUtil;
+import org.apache.hadoop.hive.metastore.messaging.AddPrimaryKeyMessage;
 import org.apache.hadoop.hive.ql.parse.repl.DumpType;
 import org.apache.hadoop.hive.ql.parse.repl.load.DumpMetaData;
 
-public class AddPrimaryKeyHandler extends AbstractEventHandler {
+public class AddPrimaryKeyHandler extends AbstractConstraintEventHandler<AddPrimaryKeyMessage> {
   AddPrimaryKeyHandler(NotificationEvent event) {
     super(event);
   }
 
   @Override
+  AddPrimaryKeyMessage eventMessage(String stringRepresentation) {
+    return deserializer.getAddPrimaryKeyMessage(stringRepresentation);
+  }
+
+  @Override
   public void handle(Context withinContext) throws Exception {
-    LOG.info("Processing#{} ADD_PRIMARYKEY_MESSAGE message : {}", fromEventId(), event.getMessage());
+    LOG.debug("Processing#{} ADD_PRIMARYKEY_MESSAGE message : {}", fromEventId(),
+        eventMessageAsJSON);
 
-    if (!EximUtil.tryValidateShouldExportTable(withinContext.db, event.getDbName(), event.getTableName(), withinContext.replicationSpec))
-    {
-      return;
+    if (shouldReplicate(withinContext)) {
+      DumpMetaData dmd = withinContext.createDmd(this);
+      dmd.setPayload(eventMessageAsJSON);
+      dmd.write();
     }
-
-    DumpMetaData dmd = withinContext.createDmd(this);
-    dmd.setPayload(event.getMessage());
-    dmd.write();
   }
 
   @Override

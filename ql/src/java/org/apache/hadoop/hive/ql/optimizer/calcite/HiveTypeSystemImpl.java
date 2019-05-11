@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -142,4 +142,10 @@ public class HiveTypeSystemImpl extends RelDataTypeSystemImpl {
   public int getMaxNumericPrecision() {
     return MAX_DECIMAL_PRECISION;
   }
+
+  @Override
+  public boolean isSchemaCaseSensitive() {
+    return false;
+  }
+
 }

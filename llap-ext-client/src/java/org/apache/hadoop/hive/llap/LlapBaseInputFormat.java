@@ -37,6 +37,7 @@ import java.util.Random;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.regex.Pattern;
 
 import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -49,14 +50,15 @@ import org.apache.hadoop.hive.llap.daemon.rpc.LlapDaemonProtocolProtos.VertexOrB
 import org.apache.hadoop.hive.llap.ext.LlapTaskUmbilicalExternalClient;
 import org.apache.hadoop.hive.llap.ext.LlapTaskUmbilicalExternalClient.LlapTaskUmbilicalExternalResponder;
 import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
-import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
 import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
 import org.apache.hadoop.hive.llap.security.LlapTokenIdentifier;
 import org.apache.hadoop.hive.llap.tez.Converters;
+import org.apache.hadoop.hive.ql.io.arrow.ArrowWrapperWritable;
+import org.apache.hadoop.hive.registry.ServiceInstanceSet;
+import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.NullWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.io.WritableComparable;
 import org.apache.hadoop.mapred.InputFormat;
 import org.apache.hadoop.mapred.InputSplit;
@@ -103,6 +105,8 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
   private String user; // "hive",
   private String pwd;  // ""
   private String query;
+  private boolean useArrow;
+  private long arrowAllocatorLimit;
   private final Random rand = new Random();
 
   public static final String URL_KEY = "llap.if.hs2.connection";
@@ -111,6 +115,8 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
   public static final String PWD_KEY = "llap.if.pwd";
   public static final String HANDLE_ID = "llap.if.handleid";
   public static final String DB_KEY = "llap.if.database";
+  public static final String SESSION_QUERIES_FOR_GET_NUM_SPLITS = "llap.session.queries.for.get.num.splits";
+  public static final Pattern SET_QUERY_PATTERN = Pattern.compile("^\\s*set\\s+.*=.+$", Pattern.CASE_INSENSITIVE);
 
   public final String SPLIT_QUERY = "select get_splits(\"%s\",%d)";
   public static final LlapServiceInstance[] serviceInstanceArray = new LlapServiceInstance[0];
@@ -122,7 +128,14 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     this.query = query;
   }
 
-  public LlapBaseInputFormat() {}
+  public LlapBaseInputFormat(boolean useArrow, long arrowAllocatorLimit) {
+    this.useArrow = useArrow;
+    this.arrowAllocatorLimit = arrowAllocatorLimit;
+  }
+
+  public LlapBaseInputFormat() {
+    this.useArrow = false;
+  }
 
 
   @SuppressWarnings("unchecked")
@@ -158,18 +171,22 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
           submitWorkInfo.getToken(), umbilicalResponder, llapToken);
 
     int attemptNum = 0;
-    // Use task attempt number from conf if provided
+    final int taskNum;
+    // Use task attempt number, task number from conf if provided
     TaskAttemptID taskAttemptId = TaskAttemptID.forName(job.get(MRJobConfig.TASK_ATTEMPT_ID));
     if (taskAttemptId != null) {
       attemptNum = taskAttemptId.getId();
+      taskNum = taskAttemptId.getTaskID().getId();
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Setting attempt number to " + attemptNum + " from task attempt ID in conf: " +
-            job.get(MRJobConfig.TASK_ATTEMPT_ID));
+        LOG.debug("Setting attempt number to: {}, task number to: {} from given taskAttemptId: {} in conf",
+            attemptNum, taskNum, taskAttemptId);
       }
+    } else {
+      taskNum = llapSplit.getSplitNum();
     }
 
     SubmitWorkRequestProto request = constructSubmitWorkRequestProto(
-        submitWorkInfo, llapSplit.getSplitNum(), attemptNum, llapClient.getAddress(),
+        submitWorkInfo, taskNum, attemptNum, llapClient.getAddress(),
         submitWorkInfo.getToken(), llapSplit.getFragmentBytes(),
         llapSplit.getFragmentBytesSignature(), job);
     llapClient.submitWork(request, host, llapSubmitPort);
@@ -194,8 +211,16 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
     LOG.info("Registered id: " + fragmentId);
 
     @SuppressWarnings("rawtypes")
-    LlapBaseRecordReader recordReader = new LlapBaseRecordReader(socket.getInputStream(),
-        llapSplit.getSchema(), Text.class, job, llapClient, (java.io.Closeable)socket);
+    LlapBaseRecordReader recordReader;
+    if(useArrow) {
+      recordReader = new LlapArrowBatchRecordReader(
+          socket.getInputStream(), llapSplit.getSchema(),
+          ArrowWrapperWritable.class, job, llapClient, socket,
+          arrowAllocatorLimit);
+    } else {
+      recordReader = new LlapBaseRecordReader(socket.getInputStream(),
+          llapSplit.getSchema(), BytesWritable.class, job, llapClient, (java.io.Closeable)socket);
+    }
     umbilicalResponder.setRecordReader(recordReader);
     return recordReader;
   }
@@ -241,6 +266,20 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
         if (database != null && !database.isEmpty()) {
           stmt.execute("USE " + database);
         }
+        String sessionQueries = job.get(SESSION_QUERIES_FOR_GET_NUM_SPLITS);
+        if (sessionQueries != null && !sessionQueries.trim().isEmpty()) {
+          String[] queries = sessionQueries.trim().split(",");
+          for (String q : queries) {
+            //allow only set queries
+            if (SET_QUERY_PATTERN.matcher(q).matches()) {
+              LOG.debug("Executing session query: {}", q);
+              stmt.execute(q);
+            } else {
+              LOG.warn("Only SET queries are allowed, not executing this query: {}", q);
+            }
+          }
+        }
+
         ResultSet res = stmt.executeQuery(sql);
         while (res.next()) {
           // deserialize split
@@ -327,11 +366,17 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
 
   private LlapServiceInstance getServiceInstance(JobConf job, LlapInputSplit llapSplit) throws IOException {
     LlapRegistryService registryService = LlapRegistryService.getClient(job);
-    String host = llapSplit.getLocations()[0];
+    LlapServiceInstance serviceInstance = null;
+    String[] hosts = llapSplit.getLocations();
+    if (hosts != null && hosts.length > 0) {
+      String host = llapSplit.getLocations()[0];
+      serviceInstance = getServiceInstanceForHost(registryService, host);
+      if (serviceInstance == null) {
+        LOG.info("No service instances found for " + host + " in registry.");
+      }
+    }
 
-    LlapServiceInstance serviceInstance = getServiceInstanceForHost(registryService, host);
     if (serviceInstance == null) {
-      LOG.info("No service instances found for " + host + " in registry.");
       serviceInstance = getServiceInstanceRandom(registryService);
       if (serviceInstance == null) {
         throw new IOException("No service instances found in registry");
@@ -343,7 +388,7 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
 
   private LlapServiceInstance getServiceInstanceForHost(LlapRegistryService registryService, String host) throws IOException {
     InetAddress address = InetAddress.getByName(host);
-    LlapServiceInstanceSet instanceSet = registryService.getInstances();
+    ServiceInstanceSet<LlapServiceInstance> instanceSet = registryService.getInstances();
     LlapServiceInstance serviceInstance = null;
 
     // The name used in the service registry may not match the host name we're using.
@@ -375,13 +420,13 @@ public class LlapBaseInputFormat<V extends WritableComparable<?>>
 
 
   private LlapServiceInstance getServiceInstanceRandom(LlapRegistryService registryService) throws IOException {
-    LlapServiceInstanceSet instanceSet = registryService.getInstances();
+    ServiceInstanceSet<LlapServiceInstance> instanceSet = registryService.getInstances();
     LlapServiceInstance serviceInstance = null;
 
     LOG.info("Finding random live service instance");
     Collection<LlapServiceInstance> allInstances = instanceSet.getAll();
     if (allInstances.size() > 0) {
-      int randIdx = rand.nextInt() % allInstances.size();
+      int randIdx = rand.nextInt(allInstances.size());;
       serviceInstance = allInstances.toArray(serviceInstanceArray)[randIdx];
     }
     return serviceInstance;

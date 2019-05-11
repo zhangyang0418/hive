@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +25,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.Order;
+import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
 import org.apache.hadoop.hive.ql.parse.ReplicationSpec;
 
 /**
@@ -58,6 +59,8 @@ public class AddPartitionDesc extends DDLDesc implements Serializable {
     Map<String, String> serdeParams = null;
     List<String> bucketCols = null;
     List<Order> sortCols = null;
+    ColumnStatistics colStats = null;
+    long writeId = -1;
 
     public Map<String, String> getPartSpec() {
       return partSpec;
@@ -145,6 +148,14 @@ public class AddPartitionDesc extends DDLDesc implements Serializable {
     public void setOutputFormat(String outputFormat) {
       this.outputFormat = outputFormat;
     }
+
+    public ColumnStatistics getColStats() { return colStats; }
+
+    public void setColStats(ColumnStatistics colStats) { this.colStats = colStats; }
+
+    public long getWriteId() { return writeId; }
+
+    public void setWriteId(long writeId) { this.writeId = writeId; }
   }
 
   private static final long serialVersionUID = 1L;

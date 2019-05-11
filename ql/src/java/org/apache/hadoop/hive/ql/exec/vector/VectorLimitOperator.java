@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -88,7 +88,7 @@ public class VectorLimitOperator extends LimitOperator implements VectorizationO
           batch.selected[i] = batch.selected[skipSize + i];
         }
       }
-      forward(row, inputObjInspectors[tag], true);
+      vectorForward(batch);
       currCount += batch.size;
     }
   }

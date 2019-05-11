@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -140,7 +140,8 @@ public class NotificationListener extends MetaStoreEventListener {
       Partition after = ape.getNewPartition();
 
       String topicName = getTopicName(ape.getTable());
-      send(messageFactory.buildAlterPartitionMessage(ape.getTable(),before, after), topicName);
+      send(messageFactory.buildAlterPartitionMessage(ape.getTable(),before, after,
+              ape.getWriteId()), topicName);
     }
   }
 
@@ -149,7 +150,7 @@ public class NotificationListener extends MetaStoreEventListener {
    * particular table by listening on a topic named "dbName.tableName" with message selector
    * string {@value org.apache.hive.hcatalog.common.HCatConstants#HCAT_EVENT} =
    * {@value org.apache.hive.hcatalog.common.HCatConstants#HCAT_DROP_PARTITION_EVENT}.
-   * </br>
+   * <br>
    * TODO: DataNucleus 2.0.3, currently used by the HiveMetaStore for persistence, has been
    * found to throw NPE when serializing objects that contain null. For this reason we override
    * some fields in the StorageDescriptor of this notification. This should be fixed after
@@ -207,7 +208,7 @@ public class NotificationListener extends MetaStoreEventListener {
       Configuration conf = handler.getConf();
       Table newTbl;
       try {
-        newTbl = handler.get_table_core(tbl.getDbName(), tbl.getTableName())
+        newTbl = handler.get_table_core(tbl.getCatName(), tbl.getDbName(), tbl.getTableName())
           .deepCopy();
         newTbl.getParameters().put(
           HCatConstants.HCAT_MSGBUS_TOPIC_NAME,
@@ -254,7 +255,7 @@ public class NotificationListener extends MetaStoreEventListener {
       // DB topic - Alan.
       String topicName = getTopicPrefix(tableEvent.getIHMSHandler().getConf()) + "." +
           after.getDbName().toLowerCase();
-      send(messageFactory.buildAlterTableMessage(before, after), topicName);
+      send(messageFactory.buildAlterTableMessage(before, after, tableEvent.getWriteId()), topicName);
     }
   }
 
@@ -263,7 +264,7 @@ public class NotificationListener extends MetaStoreEventListener {
    * dropped tables by listening on topic "HCAT" with message selector string
    * {@value org.apache.hive.hcatalog.common.HCatConstants#HCAT_EVENT} =
    * {@value org.apache.hive.hcatalog.common.HCatConstants#HCAT_DROP_TABLE_EVENT}
-   * </br>
+   * <br>
    * TODO: DataNucleus 2.0.3, currently used by the HiveMetaStore for persistence, has been
    * found to throw NPE when serializing objects that contain null. For this reason we override
    * some fields in the StorageDescriptor of this notification. This should be fixed after
@@ -422,6 +423,9 @@ public class NotificationListener extends MetaStoreEventListener {
    * @throws JMSException
    */
   protected Session createSession() throws JMSException {
+    if (conn == null) {
+      return null;
+    }
     // We want message to be sent when session commits, thus we run in
     // transacted mode.
     return conn.createSession(true, Session.SESSION_TRANSACTED);

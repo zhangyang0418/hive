@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,6 +38,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.security.auth.login.LoginException;
+
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -84,12 +85,12 @@ import org.apache.tez.serviceplugins.api.ContainerLauncherDescriptor;
 import org.apache.tez.serviceplugins.api.ServicePluginsDescriptor;
 import org.apache.tez.serviceplugins.api.TaskCommunicatorDescriptor;
 import org.apache.tez.serviceplugins.api.TaskSchedulerDescriptor;
-import org.codehaus.jackson.annotate.JsonIgnore;
 import org.codehaus.jackson.annotate.JsonProperty;
 import org.codehaus.jackson.map.annotate.JsonSerialize;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hive.ql.exec.tez.monitoring.TezJobMonitor;
+
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 
@@ -131,9 +132,15 @@ public class TezSessionState {
     }
     /** A directory that will contain resources related to DAGs and specified in configs. */
     public final Path dagResourcesDir;
-    public final Set<String> additionalFilesNotFromConf = new HashSet<>();
+    public final Map<String, LocalResource> additionalFilesNotFromConf = new HashMap<String, LocalResource>();
     /** Localized resources of this session; both from conf and not from conf (above). */
     public final Set<LocalResource> localizedResources = new HashSet<>();
+
+    @Override
+    public String toString() {
+      return dagResourcesDir + "; " + additionalFilesNotFromConf.size() + " additional files, "
+          + localizedResources.size() + " localized resources";
+    }
   }
 
   private HiveResources resources;
@@ -153,6 +160,7 @@ public class TezSessionState {
     this.conf = conf;
   }
 
+  @Override
   public String toString() {
     return "sessionId=" + sessionId + ", queueName=" + queueName + ", user=" + user
         + ", doAs=" + doAsEnabled + ", isOpen=" + isOpen() + ", isDefault=" + defaultQueue;
@@ -168,9 +176,15 @@ public class TezSessionState {
   }
 
   public boolean isOpening() {
-    if (session != null || sessionFuture == null) return false;
+    if (session != null || sessionFuture == null) {
+      return false;
+    }
     try {
-      session = sessionFuture.get(0, TimeUnit.NANOSECONDS);
+      TezClient session = sessionFuture.get(0, TimeUnit.NANOSECONDS);
+      if (session == null) {
+        return false;
+      }
+      this.session = session;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       return false;
@@ -185,10 +199,18 @@ public class TezSessionState {
   }
 
   public boolean isOpen() {
-    if (session != null) return true;
-    if (sessionFuture == null) return false;
+    if (session != null) {
+      return true;
+    }
+    if (sessionFuture == null) {
+      return false;
+    }
     try {
-      session = sessionFuture.get(0, TimeUnit.NANOSECONDS);
+      TezClient session = sessionFuture.get(0, TimeUnit.NANOSECONDS);
+      if (session == null) {
+        return false;
+      }
+      this.session = session;
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       return false;
@@ -200,11 +222,6 @@ public class TezSessionState {
     return true;
   }
 
-
-  /**
-   * Get all open sessions. Only used to clean up at shutdown.
-   * @return List<TezSessionState>
-   */
   public static String makeSessionId() {
     return UUID.randomUUID().toString();
   }
@@ -259,14 +276,16 @@ public class TezSessionState {
     if (resources != null) {
       // If we are getting the resources externally, don't relocalize anything.
       this.resources = resources;
+      LOG.info("Setting resources to " + resources);
     } else {
       this.resources = new HiveResources(createTezDir(sessionId, "resources"));
       ensureLocalResources(conf, additionalFilesNotFromConf);
+      LOG.info("Created new resources: " + resources);
     }
 
     // unless already installed on all the cluster nodes, we'll have to
     // localize hive-exec.jar as well.
-    appJarLr = createJarLocalResource(utils.getExecJarPathLocal());
+    appJarLr = createJarLocalResource(utils.getExecJarPathLocal(conf));
 
     // configuration for the application master
     final Map<String, LocalResource> commonLocalResources = new HashMap<String, LocalResource>();
@@ -347,12 +366,23 @@ public class TezSessionState {
       FutureTask<TezClient> sessionFuture = new FutureTask<>(new Callable<TezClient>() {
         @Override
         public TezClient call() throws Exception {
+          TezClient result = null;
           try {
-            return startSessionAndContainers(session, conf, commonLocalResources, tezConfig, true);
+            result = startSessionAndContainers(
+                session, conf, commonLocalResources, tezConfig, true);
           } catch (Throwable t) {
+            // The caller has already stopped the session.
             LOG.error("Failed to start Tez session", t);
             throw (t instanceof Exception) ? (Exception)t : new Exception(t);
           }
+          // Check interrupt at the last moment in case we get cancelled quickly.
+          // This is not bulletproof but should allow us to close session in most cases.
+          if (Thread.interrupted()) {
+            LOG.info("Interrupted while starting Tez session");
+            closeAndIgnoreExceptions(result);
+            return null;
+          }
+          return result;
         }
       });
       new Thread(sessionFuture, "Tez session start thread").start();
@@ -417,8 +447,10 @@ public class TezSessionState {
       try {
         session.waitTillReady();
       } catch (InterruptedException ie) {
-        if (isOnThread) throw new IOException(ie);
-        //ignore
+        if (isOnThread) {
+          throw new IOException(ie);
+          //ignore
+        }
       }
       isSuccessful = true;
       // sessionState.getQueueName() comes from cluster wide configured queue names.
@@ -449,9 +481,15 @@ public class TezSessionState {
   }
 
   public void endOpen() throws InterruptedException, CancellationException {
-    if (this.session != null || this.sessionFuture == null) return;
+    if (this.session != null || this.sessionFuture == null) {
+      return;
+    }
     try {
-      this.session = this.sessionFuture.get();
+      TezClient session = this.sessionFuture.get();
+      if (session == null) {
+        throw new RuntimeException("Initialization was interrupted");
+      }
+      this.session = session;
     } catch (ExecutionException e) {
       throw new RuntimeException(e);
     }
@@ -555,6 +593,9 @@ public class TezSessionState {
   /** This is called in openInternal and in TezTask.updateSession to localize conf resources. */
   public void ensureLocalResources(Configuration conf, String[] newFilesNotFromConf)
           throws IOException, LoginException, URISyntaxException, TezException {
+    if (resources == null) {
+      throw new AssertionError("Ensure called on an unitialized (or closed) session " + sessionId);
+    }
     String dir = resources.dagResourcesDir.toString();
     resources.localizedResources.clear();
 
@@ -572,8 +613,10 @@ public class TezSessionState {
       boolean hasResources = !resources.additionalFilesNotFromConf.isEmpty();
       if (hasResources) {
         for (String s : newFilesNotFromConf) {
-          hasResources = resources.additionalFilesNotFromConf.contains(s);
-          if (!hasResources) break;
+          hasResources = resources.additionalFilesNotFromConf.keySet().contains(s);
+          if (!hasResources) {
+            break;
+          }
         }
       }
       if (!hasResources) {
@@ -582,23 +625,27 @@ public class TezSessionState {
         if (newResources != null) {
           resources.localizedResources.addAll(newResources);
         }
-        for (String fullName : newFilesNotFromConf) {
-          resources.additionalFilesNotFromConf.add(fullName);
+        for (int i=0;i<newFilesNotFromConf.length;i++) {
+          resources.additionalFilesNotFromConf.put(newFilesNotFromConf[i], newResources.get(i));
         }
+      } else {
+        resources.localizedResources.addAll(resources.additionalFilesNotFromConf.values());
       }
     }
 
-    // Finally add the files to AM. The old code seems to do this twice, first for all the new
-    // resources regardless of type; and then for all the session resources that are not of type
-    // file (see branch-1 calls to addAppMasterLocalFiles: from updateSession and with resourceMap
-    // from submit).
+    // Finally, add the files to the existing AM (if any). The old code seems to do this twice,
+    // first for all the new resources regardless of type; and then for all the session resources
+    // that are not of type file (see branch-1 calls to addAppMasterLocalFiles: from updateSession
+    // and with resourceMap from submit).
     // TODO: Do we really need all this nonsense?
-    if (newResources != null && !newResources.isEmpty()) {
-      session.addAppMasterLocalFiles(DagUtils.createTezLrMap(null, newResources));
-    }
-    if (!resources.localizedResources.isEmpty()) {
-      session.addAppMasterLocalFiles(
-          DagUtils.getResourcesUpdatableForAm(resources.localizedResources));
+    if (session != null) {
+      if (newResources != null && !newResources.isEmpty()) {
+        session.addAppMasterLocalFiles(DagUtils.createTezLrMap(null, newResources));
+      }
+      if (!resources.localizedResources.isEmpty()) {
+        session.addAppMasterLocalFiles(
+            DagUtils.getResourcesUpdatableForAm(resources.localizedResources));
+      }
     }
   }
 
@@ -612,36 +659,40 @@ public class TezSessionState {
    * @throws Exception
    */
   void close(boolean keepDagFilesDir) throws Exception {
-    if (session != null) {
-      LOG.info("Closing Tez Session");
-      closeClient(session);
-    } else if (sessionFuture != null) {
-      sessionFuture.cancel(true);
-      TezClient asyncSession = null;
-      try {
-        asyncSession = sessionFuture.get(); // In case it was done and noone looked at it.
-      } catch (ExecutionException | CancellationException e) {
-        // ignore
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-        // ignore
-      }
-      if (asyncSession != null) {
-        LOG.info("Closing Tez Session");
-        closeClient(asyncSession);
-      }
-    }
-
-    cleanupScratchDir();
-    if (!keepDagFilesDir) {
-      cleanupDagResources();
-    }
-    session = null;
-    sessionFuture = null;
     console = null;
-    tezScratchDir = null;
-    // Do not reset dag resources; if it wasn't cleaned it's still needed.
     appJarLr = null;
+
+    try {
+      if (session != null) {
+        LOG.info("Closing Tez Session");
+        closeClient(session);
+        session = null;
+      } else if (sessionFuture != null) {
+        sessionFuture.cancel(true);
+        TezClient asyncSession = null;
+        try {
+          asyncSession = sessionFuture.get(); // In case it was done and noone looked at it.
+        } catch (ExecutionException | CancellationException e) {
+          // ignore
+        } catch (InterruptedException e) {
+          Thread.currentThread().interrupt();
+          // ignore
+        }
+        sessionFuture = null;
+        if (asyncSession != null) {
+          LOG.info("Closing Tez Session");
+          closeClient(asyncSession);
+        }
+      }
+    } finally {
+      try {
+        cleanupScratchDir();
+      } finally {
+        if (!keepDagFilesDir) {
+          cleanupDagResources();
+        }
+      }
+    }
   }
 
   private void closeClient(TezClient client) throws TezException,
@@ -654,15 +705,20 @@ public class TezSessionState {
   }
 
   protected final void cleanupScratchDir() throws IOException {
-    FileSystem fs = tezScratchDir.getFileSystem(conf);
-    fs.delete(tezScratchDir, true);
-    tezScratchDir = null;
+    if (tezScratchDir != null) {
+      FileSystem fs = tezScratchDir.getFileSystem(conf);
+      fs.delete(tezScratchDir, true);
+      tezScratchDir = null;
+    }
   }
 
   protected final void cleanupDagResources() throws IOException {
-    FileSystem fs = resources.dagResourcesDir.getFileSystem(conf);
-    fs.delete(resources.dagResourcesDir, true);
-    resources = null;
+    LOG.info("Attemting to clean up resources for " + sessionId + ": " + resources);
+    if (resources != null) {
+      FileSystem fs = resources.dagResourcesDir.getFileSystem(conf);
+      fs.delete(resources.dagResourcesDir, true);
+      resources = null;
+    }
   }
 
   public String getSessionId() {
@@ -702,7 +758,10 @@ public class TezSessionState {
   private Path createTezDir(String sessionId, String suffix) throws IOException {
     // tez needs its own scratch dir (per session)
     // TODO: De-link from SessionState. A TezSession can be linked to different Hive Sessions via the pool.
-    Path tezDir = new Path(SessionState.get().getHdfsScratchDirURIString(), TEZ_DIR);
+    SessionState sessionState = SessionState.get();
+    String hdfsScratchDir = sessionState == null ? HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCHDIR) : sessionState
+      .getHdfsScratchDirURIString();
+    Path tezDir = new Path(hdfsScratchDir, TEZ_DIR);
     tezDir = new Path(tezDir, sessionId + ((suffix == null) ? "" : ("-" + suffix)));
     FileSystem fs = tezDir.getFileSystem(conf);
     FsPermission fsPermission = new FsPermission(HiveConf.getVar(conf, HiveConf.ConfVars.SCRATCHDIRPERMISSION));
@@ -832,7 +891,9 @@ public class TezSessionState {
 
   /** Mark session as free for use from TezTask, for safety/debugging purposes. */
   public void markFree() {
-    if (ownerThread.getAndSet(null) == null) throw new AssertionError("Not in use");
+    if (ownerThread.getAndSet(null) == null) {
+      throw new AssertionError("Not in use");
+    }
   }
 
   /** Mark session as being in use from TezTask, for safety/debugging purposes. */

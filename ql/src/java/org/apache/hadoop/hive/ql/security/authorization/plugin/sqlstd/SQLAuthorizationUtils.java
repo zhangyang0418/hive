@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -99,7 +99,7 @@ public class SQLAuthorizationUtils {
           grantOption, 0 /*real grant time added by metastore*/);
       for (HivePrincipal principal : hivePrincipals) {
         HiveObjectPrivilege objPriv = new HiveObjectPrivilege(privObj, principal.getName(),
-            AuthorizationUtils.getThriftPrincipalType(principal.getType()), grantInfo);
+            AuthorizationUtils.getThriftPrincipalType(principal.getType()), grantInfo, "SQL");
         privBag.addToPrivileges(objPriv);
       }
     }

@@ -26,8 +26,16 @@ POSTHOOK: Output: database:default
 POSTHOOK: Output: default@blobstore_table
 PREHOOK: query: EXPLAIN EXTENDED FROM hdfs_table INSERT OVERWRITE TABLE blobstore_table SELECT hdfs_table.key GROUP BY hdfs_table.key ORDER BY hdfs_table.key
 PREHOOK: type: QUERY
+PREHOOK: Input: default@hdfs_table
+PREHOOK: Output: default@blobstore_table
 POSTHOOK: query: EXPLAIN EXTENDED FROM hdfs_table INSERT OVERWRITE TABLE blobstore_table SELECT hdfs_table.key GROUP BY hdfs_table.key ORDER BY hdfs_table.key
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@hdfs_table
+POSTHOOK: Output: default@blobstore_table
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`hdfs_table`
+GROUP BY `key`
+ORDER BY `key`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -40,25 +48,27 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: hdfs_table
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             GatherStats: false
             Select Operator
               expressions: key (type: int)
               outputColumnNames: key
-              Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
               Group By Operator
                 keys: key (type: int)
+                minReductionHashAggr: 0.99
                 mode: hash
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: int)
                   null sort order: a
                   sort order: +
                   Map-reduce partition columns: _col0 (type: int)
-                  Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   tag: -1
                   auto parallelism: false
+      Execution mode: vectorized
       Path -> Alias:
 #### A masked pattern was here ####
       Path -> Partition:
@@ -70,6 +80,7 @@ STAGE PLANS:
             properties:
               COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
               bucket_count -1
+              bucketing_version 2
               column.name.delimiter ,
               columns key
               columns.comments 
@@ -91,6 +102,7 @@ STAGE PLANS:
               properties:
                 COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                 bucket_count -1
+                bucketing_version 2
                 column.name.delimiter ,
                 columns key
                 columns.comments 
@@ -116,7 +128,7 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+          Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
           File Output Operator
             compressed: false
             GlobalTableId: 0
@@ -143,11 +155,12 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
-              Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
               tag: -1
               auto parallelism: false
+      Execution mode: vectorized
       Path -> Alias:
 #### A masked pattern was here ####
       Path -> Partition:
@@ -180,13 +193,13 @@ STAGE PLANS:
         Select Operator
           expressions: KEY.reducesinkkey0 (type: int)
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+          Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
           File Output Operator
             compressed: false
             GlobalTableId: 1
             directory: ### BLOBSTORE_STAGING_PATH ###
             NumFilesPerFileSink: 1
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             Stats Publishing Key Prefix: ### BLOBSTORE_STAGING_PATH ###
             table:
                 input format: org.apache.hadoop.mapred.TextInputFormat
@@ -194,6 +207,7 @@ STAGE PLANS:
                 properties:
                   COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                   bucket_count -1
+                  bucketing_version 2
                   column.name.delimiter ,
                   columns key
                   columns.comments 
@@ -217,22 +231,22 @@ STAGE PLANS:
           Select Operator
             expressions: _col0 (type: int)
             outputColumnNames: key
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             Group By Operator
               aggregations: compute_stats(key, 'hll')
               mode: complete
               outputColumnNames: _col0
-              Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
               Select Operator
                 expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint,ndvbitvector:binary>)
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
                   NumFilesPerFileSink: 1
-                  Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
 #### A masked pattern was here ####
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
@@ -261,6 +275,7 @@ STAGE PLANS:
               properties:
                 COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                 bucket_count -1
+                bucketing_version 2
                 column.name.delimiter ,
                 columns key
                 columns.comments 
@@ -291,8 +306,16 @@ STAGE PLANS:
 
 PREHOOK: query: EXPLAIN EXTENDED FROM hdfs_table INSERT OVERWRITE TABLE blobstore_table SELECT hdfs_table.key GROUP BY hdfs_table.key ORDER BY hdfs_table.key
 PREHOOK: type: QUERY
+PREHOOK: Input: default@hdfs_table
+PREHOOK: Output: default@blobstore_table
 POSTHOOK: query: EXPLAIN EXTENDED FROM hdfs_table INSERT OVERWRITE TABLE blobstore_table SELECT hdfs_table.key GROUP BY hdfs_table.key ORDER BY hdfs_table.key
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@hdfs_table
+POSTHOOK: Output: default@blobstore_table
+OPTIMIZED SQL: SELECT `key`
+FROM `default`.`hdfs_table`
+GROUP BY `key`
+ORDER BY `key`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -305,25 +328,27 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: hdfs_table
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             GatherStats: false
             Select Operator
               expressions: key (type: int)
               outputColumnNames: key
-              Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
               Group By Operator
                 keys: key (type: int)
+                minReductionHashAggr: 0.99
                 mode: hash
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                 Reduce Output Operator
                   key expressions: _col0 (type: int)
                   null sort order: a
                   sort order: +
                   Map-reduce partition columns: _col0 (type: int)
-                  Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
                   tag: -1
                   auto parallelism: false
+      Execution mode: vectorized
       Path -> Alias:
 #### A masked pattern was here ####
       Path -> Partition:
@@ -335,6 +360,7 @@ STAGE PLANS:
             properties:
               COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
               bucket_count -1
+              bucketing_version 2
               column.name.delimiter ,
               columns key
               columns.comments 
@@ -356,6 +382,7 @@ STAGE PLANS:
               properties:
                 COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                 bucket_count -1
+                bucketing_version 2
                 column.name.delimiter ,
                 columns key
                 columns.comments 
@@ -381,7 +408,7 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+          Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
           File Output Operator
             compressed: false
             GlobalTableId: 0
@@ -408,11 +435,12 @@ STAGE PLANS:
             GatherStats: false
             Reduce Output Operator
               key expressions: _col0 (type: int)
-              null sort order: a
+              null sort order: z
               sort order: +
-              Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
               tag: -1
               auto parallelism: false
+      Execution mode: vectorized
       Path -> Alias:
 #### A masked pattern was here ####
       Path -> Partition:
@@ -445,13 +473,13 @@ STAGE PLANS:
         Select Operator
           expressions: KEY.reducesinkkey0 (type: int)
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+          Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
           File Output Operator
             compressed: false
             GlobalTableId: 1
             directory: ### BLOBSTORE_STAGING_PATH ###
             NumFilesPerFileSink: 1
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             Stats Publishing Key Prefix: ### BLOBSTORE_STAGING_PATH ###
             table:
                 input format: org.apache.hadoop.mapred.TextInputFormat
@@ -459,6 +487,7 @@ STAGE PLANS:
                 properties:
                   COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                   bucket_count -1
+                  bucketing_version 2
                   column.name.delimiter ,
                   columns key
                   columns.comments 
@@ -482,22 +511,22 @@ STAGE PLANS:
           Select Operator
             expressions: _col0 (type: int)
             outputColumnNames: key
-            Statistics: Num rows: 1 Data size: 0 Basic stats: PARTIAL Column stats: NONE
+            Statistics: Num rows: 1 Data size: 4 Basic stats: COMPLETE Column stats: NONE
             Group By Operator
               aggregations: compute_stats(key, 'hll')
               mode: complete
               outputColumnNames: _col0
-              Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+              Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
               Select Operator
                 expressions: _col0 (type: struct<columntype:string,min:bigint,max:bigint,countnulls:bigint,numdistinctvalues:bigint,ndvbitvector:binary>)
                 outputColumnNames: _col0
-                Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+                Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
                 File Output Operator
                   compressed: false
                   GlobalTableId: 0
 #### A masked pattern was here ####
                   NumFilesPerFileSink: 1
-                  Statistics: Num rows: 1 Data size: 424 Basic stats: PARTIAL Column stats: NONE
+                  Statistics: Num rows: 1 Data size: 428 Basic stats: COMPLETE Column stats: NONE
 #### A masked pattern was here ####
                   table:
                       input format: org.apache.hadoop.mapred.SequenceFileInputFormat
@@ -526,6 +555,7 @@ STAGE PLANS:
               properties:
                 COLUMN_STATS_ACCURATE {"BASIC_STATS":"true","COLUMN_STATS":{"key":"true"}}
                 bucket_count -1
+                bucketing_version 2
                 column.name.delimiter ,
                 columns key
                 columns.comments 

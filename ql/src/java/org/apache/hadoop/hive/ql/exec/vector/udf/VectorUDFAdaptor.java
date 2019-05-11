@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,39 +17,17 @@
  */
 package org.apache.hadoop.hive.ql.exec.vector.udf;
 
-import java.sql.Date;
-import java.sql.Timestamp;
-import java.util.Map;
-
-import org.apache.hadoop.hive.common.type.HiveIntervalYearMonth;
-import org.apache.hadoop.hive.common.type.HiveIntervalDayTime;
-import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.ql.exec.MapredContext;
 import org.apache.hadoop.hive.ql.exec.UDFArgumentException;
 import org.apache.hadoop.hive.ql.exec.vector.*;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.StringExpr;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpression;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriter;
 import org.apache.hadoop.hive.ql.exec.vector.expressions.VectorExpressionWriterFactory;
-import org.apache.hadoop.hive.ql.exec.vector.expressions.IfExprConditionalFilter;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.plan.ExprNodeGenericFuncDesc;
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF;
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDFIf;
-import org.apache.hadoop.hive.serde2.io.DateWritable;
-import org.apache.hadoop.hive.serde2.io.HiveCharWritable;
-import org.apache.hadoop.hive.serde2.io.HiveVarcharWritable;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.SettableMapObjectInspector;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.*;
-import org.apache.hadoop.hive.serde2.typeinfo.CharTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
-import org.apache.hadoop.hive.serde2.typeinfo.VarcharTypeInfo;
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.WritableBinaryObjectInspector;
-import org.apache.hadoop.hive.serde2.io.HiveIntervalDayTimeWritable;
-import org.apache.hadoop.hive.serde2.io.HiveIntervalYearMonthWritable;
-import org.apache.hadoop.io.BytesWritable;
-import org.apache.hadoop.io.Text;
 
 /**
  * A VectorUDFAdaptor is a vectorized expression for invoking a custom
@@ -62,7 +40,7 @@ public class VectorUDFAdaptor extends VectorExpression {
   private String resultType;
   private VectorUDFArgDesc[] argDescs;
   private ExprNodeGenericFuncDesc expr;
-  private IfExprConditionalFilter cf;
+  private boolean suppressEvaluateExceptions;
 
   private transient GenericUDF genericUDF;
   private transient GenericUDF.DeferredObject[] deferredChildren;
@@ -87,6 +65,10 @@ public class VectorUDFAdaptor extends VectorExpression {
     this.argDescs = argDescs;
   }
 
+  public void setSuppressEvaluateExceptions(boolean suppressEvaluateExceptions) {
+    this.suppressEvaluateExceptions = suppressEvaluateExceptions;
+  }
+
   // Initialize transient fields. To be called after deserialization of other fields.
   public void init() throws HiveException, UDFArgumentException {
     genericUDF = expr.getGenericUDF();
@@ -105,13 +87,6 @@ public class VectorUDFAdaptor extends VectorExpression {
     outputVectorAssignRow.init(outputTypeInfo, outputColumnNum);
 
     genericUDF.initialize(childrenOIs);
-    if((GenericUDFIf.class.getName()).equals(genericUDF.getUdfName())){
-
-      // UNDONE: This kind of work should be done in VectorizationContext.
-      cf = new IfExprConditionalFilter
-        (argDescs[0].getColumnNum(), argDescs[1].getColumnNum(),
-          argDescs[2].getColumnNum(), outputColumnNum);
-    }
 
     // Initialize constant arguments
     for (int i = 0; i < argDescs.length; i++) {
@@ -122,7 +97,7 @@ public class VectorUDFAdaptor extends VectorExpression {
   }
 
   @Override
-  public void evaluate(VectorizedRowBatch batch) {
+  public void evaluate(VectorizedRowBatch batch) throws HiveException {
 
     if (genericUDF == null) {
       try {
@@ -133,11 +108,7 @@ public class VectorUDFAdaptor extends VectorExpression {
     }
 
     if (childExpressions != null) {
-      if ((GenericUDFIf.class.getName()).equals(genericUDF.getUdfName()) && cf != null) {
-        cf.evaluateIfConditionalExpr(batch, childExpressions);
-      } else {
-        super.evaluateChildren(batch);
-      }
+      super.evaluateChildren(batch);
     }
 
     int[] sel = batch.selected;
@@ -154,7 +125,9 @@ public class VectorUDFAdaptor extends VectorExpression {
       return;
     }
 
-    batch.cols[outputColumnNum].noNulls = true;
+    /*
+     * Do careful maintenance of the outputColVector.noNulls flag.
+     */
 
     /* If all input columns are repeating, just evaluate function
      * for row 0 in the batch and set output repeating.
@@ -204,7 +177,7 @@ public class VectorUDFAdaptor extends VectorExpression {
   /* Calculate the function result for row i of the batch and
    * set the output column vector entry i to the result.
    */
-  private void setResult(int i, VectorizedRowBatch b) {
+  private void setResult(int i, VectorizedRowBatch b) throws HiveException {
 
     // get arguments
     for (int j = 0; j < argDescs.length; j++) {
@@ -213,15 +186,19 @@ public class VectorUDFAdaptor extends VectorExpression {
 
     // call function
     Object result;
-    try {
+    if (!suppressEvaluateExceptions) {
       result = genericUDF.evaluate(deferredChildren);
-    } catch (HiveException e) {
+    } else {
+      try {
+        result = genericUDF.evaluate(deferredChildren);
+      } catch (HiveException e) {
 
-      /* For UDFs that expect primitive types (like int instead of Integer or IntWritable),
-       * this will catch the the exception that happens if they are passed a NULL value.
-       * Then the default NULL handling logic will apply, and the result will be NULL.
-       */
-      result = null;
+        /* For UDFs that expect primitive types (like int instead of Integer or IntWritable),
+         * this will catch the the exception that happens if they are passed a NULL value.
+         * Then the default NULL handling logic will apply, and the result will be NULL.
+         */
+        result = null;
+      }
     }
 
     // Set output column vector entry.  Since we have one output column, the logical index = 0.
@@ -237,5 +214,13 @@ public class VectorUDFAdaptor extends VectorExpression {
   @Override
   public VectorExpressionDescriptor.Descriptor getDescriptor() {
     return (new VectorExpressionDescriptor.Builder()).build();
+  }
+
+  public VectorUDFArgDesc[] getArgDescs() {
+    return argDescs;
+  }
+
+  public void setArgDescs(final VectorUDFArgDesc[] argDescs) {
+    this.argDescs = argDescs;
   }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -279,7 +279,6 @@ public class SparkWork extends AbstractOperatorDesc {
   /**
    * connect adds an edge between a and b. Both nodes have
    * to be added prior to calling connect.
-   * @param
    */
   public void connect(BaseWork a, BaseWork b, SparkEdgeProperty edgeProp) {
     workGraph.get(a).add(b);

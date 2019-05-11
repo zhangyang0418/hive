@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -69,6 +69,7 @@ import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveMultiJoin;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveProject;
+import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveSqlFunction;
 import org.apache.hadoop.hive.ql.optimizer.calcite.reloperators.HiveTableFunctionScan;
 import org.apache.hadoop.hive.ql.optimizer.calcite.translator.ExprNodeConverter;
 import org.apache.hadoop.hive.ql.optimizer.calcite.translator.SqlFunctionConverter;
@@ -490,6 +491,10 @@ public class HiveCalciteUtil {
       this.projsJoinKeysInJoinSchema = projsJoinKeysInJoinSchemaBuilder.build();
     }
 
+    public SqlKind getComparisonType() {
+      return comparisonType;
+    }
+
     public List<RexNode> getJoinExprs(int input) {
       return this.joinKeyExprs.get(input);
     }
@@ -536,7 +541,7 @@ public class HiveCalciteUtil {
 
       // 1. Split leaf join predicate to expressions from left, right
       RexNode otherConditions = HiveRelOptUtil.splitHiveJoinCondition(systemFieldList, inputs, pe,
-          joinExprs, filterNulls, null);
+          joinExprs, filterNulls, new ArrayList<SqlOperator>());
 
       if (otherConditions.isAlwaysTrue()) {
         // 2. Collect child projection indexes used
@@ -613,7 +618,7 @@ public class HiveCalciteUtil {
 
   /**
    * Get top level select starting from root. Assumption here is root can only
-   * be Sort & Project. Also the top project should be at most 2 levels below
+   * be Sort &amp; Project. Also the top project should be at most 2 levels below
    * Sort; i.e Sort(Limit)-Sort(OB)-Select
    *
    * @param rootRel
@@ -965,6 +970,45 @@ public class HiveCalciteUtil {
     List<Integer> argList = new ArrayList<Integer>();
     argList.add(pos);
     return AggregateCall.create(aggFunction, false, argList, -1, aggFnRetType, null);
+  }
+
+  /**
+   * Is the expression usable for query materialization.
+   */
+  public static boolean isMaterializable(RexNode expr) {
+    return (checkMaterializable(expr) == null);
+  }
+
+  /**
+   * Check if the expression is usable for query materialization, returning the first failing expression.
+   */
+  public static RexCall checkMaterializable(RexNode expr) {
+    RexCall failingCall = null;
+
+    if (expr == null) {
+      return null;
+    }
+
+    RexVisitor<Void> visitor = new RexVisitorImpl<Void>(true) {
+      @Override
+      public Void visitCall(org.apache.calcite.rex.RexCall call) {
+        // non-deterministic functions as well as runtime constants are not materializable.
+        SqlOperator op = call.getOperator();
+        if (!op.isDeterministic() || op.isDynamicFunction() ||
+            (op instanceof HiveSqlFunction && ((HiveSqlFunction) op).isRuntimeConstant())) {
+          throw new Util.FoundOne(call);
+        }
+        return super.visitCall(call);
+      }
+    };
+
+    try {
+      expr.accept(visitor);
+    } catch (Util.FoundOne e) {
+      failingCall = (RexCall) e.getNode();
+    }
+
+    return failingCall;
   }
 
   public static HiveTableFunctionScan createUDTFForSetOp(RelOptCluster cluster, RelNode input)

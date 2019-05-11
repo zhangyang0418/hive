@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -264,12 +264,15 @@ public class ATSHook implements ExecuteWithHookContext {
                   null,// pCtx
                   plan.getRootTasks(),// RootTasks
                   plan.getFetchTask(),// FetchTask
+                      null,
                   null,// analyzer
                   config, //explainConfig
-                  null// cboInfo
+                  null, // cboInfo
+                  plan.getOptimizedQueryString(), // optimizedSQL
+                  plan.getOptimizedCBOPlan()
               );
                 @SuppressWarnings("unchecked")
-                ExplainTask explain = (ExplainTask) TaskFactory.get(work, conf);
+                ExplainTask explain = (ExplainTask) TaskFactory.get(work);
                 explain.initialize(queryState, plan, null, null);
                 String query = plan.getQueryStr();
                 JSONObject explainPlan = explain.getJSONPlan(null, work);

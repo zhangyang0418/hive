@@ -1,65 +1,61 @@
 /*
-  Licensed to the Apache Software Foundation (ASF) under one
-  or more contributor license agreements.  See the NOTICE file
-  distributed with this work for additional information
-  regarding copyright ownership.  The ASF licenses this file
-  to you under the Apache License, Version 2.0 (the
-  "License"); you may not use this file except in compliance
-  with the License.  You may obtain a copy of the License at
-
-      http://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.hadoop.hive.ql.parse;
 
 import org.antlr.runtime.tree.Tree;
-import org.apache.commons.lang3.StringUtils;
-import org.apache.hadoop.fs.FileStatus;
+import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hive.common.ValidTxnList;
 import org.apache.hadoop.hive.conf.HiveConf;
+import org.apache.hadoop.hive.metastore.ReplChangeManager;
+import org.apache.hadoop.hive.metastore.Warehouse;
 import org.apache.hadoop.hive.metastore.api.Database;
 import org.apache.hadoop.hive.ql.ErrorMsg;
 import org.apache.hadoop.hive.ql.QueryState;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.repl.ReplDumpWork;
-import org.apache.hadoop.hive.ql.exec.repl.ReplStateLogWork;
-import org.apache.hadoop.hive.ql.exec.repl.bootstrap.ReplLoadWork;
+import org.apache.hadoop.hive.ql.exec.repl.ReplExternalTables;
+import org.apache.hadoop.hive.ql.exec.repl.ReplLoadWork;
 import org.apache.hadoop.hive.ql.hooks.ReadEntity;
+import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.parse.repl.dump.Utils;
 import org.apache.hadoop.hive.ql.parse.repl.load.DumpMetaData;
-import org.apache.hadoop.hive.ql.parse.repl.load.EventDumpDirComparator;
-import org.apache.hadoop.hive.ql.parse.repl.load.UpdatedMetaDataTracker;
-import org.apache.hadoop.hive.ql.parse.repl.load.message.MessageHandler;
-import org.apache.hadoop.hive.ql.parse.repl.load.log.IncrementalLoadLogger;
-import org.apache.hadoop.hive.ql.parse.repl.ReplLogger;
-import org.apache.hadoop.hive.ql.plan.AlterDatabaseDesc;
-import org.apache.hadoop.hive.ql.plan.AlterTableDesc;
-import org.apache.hadoop.hive.ql.plan.DDLWork;
-import org.apache.hadoop.hive.ql.plan.DependencyCollectionWork;
 import org.apache.hadoop.hive.ql.plan.PlanUtils;
-import org.apache.hadoop.hive.ql.session.SessionState;
-import org.apache.hadoop.hive.ql.stats.StatsUtils;
 
 import java.io.FileNotFoundException;
-import java.io.Serializable;
+import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static org.apache.hadoop.hive.ql.exec.repl.ReplExternalTables.Reader;
+import static org.apache.hadoop.hive.ql.exec.repl.ExternalTableCopyTaskBuilder.DirCopyWork;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.HIVEQUERYID;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.REPL_DUMP_METADATA_ONLY;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.REPL_ENABLE_MOVE_OPTIMIZATION;
+import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.REPL_MOVE_OPTIMIZED_FILE_SCHEMES;
 import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_DBNAME;
-import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_FROM;
 import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_LIMIT;
 import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_REPL_CONFIG;
 import static org.apache.hadoop.hive.ql.parse.HiveParser.TOK_REPL_DUMP;
@@ -82,14 +78,16 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
   // of any other queries running in the session
   private HiveConf conf;
 
+  // By default, this will be same as that of super class BaseSemanticAnalyzer. But need to obtain again
+  // if the Hive configs are received from WITH clause in REPL LOAD or REPL STATUS commands.
+  private Hive db;
+
   private static String testInjectDumpDir = null; // unit tests can overwrite this to affect default dump behaviour
   private static final String dumpSchema = "dump_dir,last_repl_id#string,string";
 
-  public static final String FUNCTIONS_ROOT_DIR_NAME = "_functions";
-  public static final String CONSTRAINTS_ROOT_DIR_NAME = "_constraints";
-
   ReplicationSemanticAnalyzer(QueryState queryState) throws SemanticException {
     super(queryState);
+    this.db = super.db;
     this.conf = new HiveConf(super.conf);
   }
 
@@ -97,10 +95,17 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
   public void analyzeInternal(ASTNode ast) throws SemanticException {
     LOG.debug("ReplicationSemanticAanalyzer: analyzeInternal");
     LOG.debug(ast.getName() + ":" + ast.getToken().getText() + "=" + ast.getText());
+    // Some of the txn related configs were not set when ReplicationSemanticAnalyzer.conf was initialized.
+    // It should be set first.
+    setTxnConfigs();
     switch (ast.getToken().getType()) {
       case TOK_REPL_DUMP: {
         LOG.debug("ReplicationSemanticAnalyzer: analyzeInternal: dump");
-        initReplDump(ast);
+        try {
+          initReplDump(ast);
+        } catch (HiveException e) {
+          throw new SemanticException(e.getMessage(), e);
+        }
         analyzeReplDump(ast);
         break;
       }
@@ -122,15 +127,33 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     }
   }
 
-  private void initReplDump(ASTNode ast) {
+  private void setTxnConfigs() {
+    String validTxnList = queryState.getConf().get(ValidTxnList.VALID_TXNS_KEY);
+    if (validTxnList != null) {
+      conf.set(ValidTxnList.VALID_TXNS_KEY, validTxnList);
+    }
+  }
+
+  private void initReplDump(ASTNode ast) throws HiveException {
     int numChildren = ast.getChildCount();
+    boolean isMetaDataOnly = false;
     dbNameOrPattern = PlanUtils.stripQuotes(ast.getChild(0).getText());
+
     // skip the first node, which is always required
     int currNode = 1;
     while (currNode < numChildren) {
-      if (ast.getChild(currNode).getType() != TOK_FROM) {
+      if (ast.getChild(currNode).getType() == TOK_REPL_CONFIG) {
+        Map<String, String> replConfigs
+            = DDLSemanticAnalyzer.getProps((ASTNode) ast.getChild(currNode).getChild(0));
+        if (null != replConfigs) {
+          for (Map.Entry<String, String> config : replConfigs.entrySet()) {
+            conf.set(config.getKey(), config.getValue());
+          }
+          isMetaDataOnly = HiveConf.getBoolVar(conf, REPL_DUMP_METADATA_ONLY);
+        }
+      } else if (ast.getChild(currNode).getType() == TOK_TABNAME) {
         // optional tblName was specified.
-        tblNameOrPattern = PlanUtils.stripQuotes(ast.getChild(currNode).getText());
+        tblNameOrPattern = PlanUtils.stripQuotes(ast.getChild(currNode).getChild(0).getText());
       } else {
         // TOK_FROM subtree
         Tree fromNode = ast.getChild(currNode);
@@ -152,11 +175,22 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
           // move to the next child in FROM tree
           numChild++;
         }
-        // FROM node is always the last
-        break;
       }
       // move to the next root node
       currNode++;
+    }
+
+    for (String dbName : Utils.matchesDb(db, dbNameOrPattern)) {
+      Database database = db.getDatabase(dbName);
+      if (database != null) {
+        if (!isMetaDataOnly && !ReplChangeManager.isSourceOfReplication(database)) {
+          LOG.error("Cannot dump database " + dbNameOrPattern +
+                  " as it is not a source of replication (repl.source.for)");
+          throw new SemanticException(ErrorMsg.REPL_DATABASE_IS_NOT_SOURCE_OF_REPLICATION.getMsg());
+        }
+      } else {
+        throw new SemanticException("Cannot dump database " + dbNameOrPattern + " as it does not exist");
+      }
     }
   }
 
@@ -176,7 +210,7 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
               ErrorMsg.INVALID_PATH.getMsg(ast),
               maxEventLimit,
               ctx.getResFile().toUri().toString()
-          ), conf);
+      ), conf);
       rootTasks.add(replDumpWorkTask);
       if (dbNameOrPattern != null) {
         for (String dbName : Utils.matchesDb(db, dbNameOrPattern)) {
@@ -197,6 +231,29 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     }
   }
 
+  private boolean ifEnableMoveOptimization(Path filePath, org.apache.hadoop.conf.Configuration conf) throws Exception {
+    if (filePath == null) {
+      throw new HiveException("filePath cannot be null");
+    }
+
+    URI uri = filePath.toUri();
+    String scheme = uri.getScheme();
+    scheme = StringUtils.isBlank(scheme) ? FileSystem.get(uri, conf).getScheme() : scheme;
+    if (StringUtils.isBlank(scheme)) {
+      throw new HiveException("Cannot get valid scheme for " + filePath);
+    }
+
+    LOG.info("scheme is " + scheme);
+
+    String[] schmeList = conf.get(REPL_MOVE_OPTIMIZED_FILE_SCHEMES.varname).toLowerCase().split(",");
+    for (String schemeIter : schmeList) {
+      if (schemeIter.trim().equalsIgnoreCase(scheme.trim())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   // REPL LOAD
   private void initReplLoad(ASTNode ast) throws SemanticException {
     path = PlanUtils.stripQuotes(ast.getChild(0).getText());
@@ -211,13 +268,7 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
           tblNameOrPattern = PlanUtils.stripQuotes(childNode.getChild(0).getText());
           break;
         case TOK_REPL_CONFIG:
-          Map<String, String> replConfigs
-                  = DDLSemanticAnalyzer.getProps((ASTNode) childNode.getChild(0));
-          if (null != replConfigs) {
-            for (Map.Entry<String, String> config : replConfigs.entrySet()) {
-              conf.set(config.getKey(), config.getValue());
-            }
-          }
+          setConfigs((ASTNode) childNode.getChild(0));
           break;
         default:
           throw new SemanticException("Unrecognized token in REPL LOAD statement");
@@ -276,13 +327,29 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
     // import job in its place.
 
     try {
-
+      assert(path != null);
       Path loadPath = new Path(path);
       final FileSystem fs = loadPath.getFileSystem(conf);
 
+      // Make fully qualified path for further use.
+      loadPath = fs.makeQualified(loadPath);
+
       if (!fs.exists(loadPath)) {
         // supposed dump path does not exist.
-        throw new FileNotFoundException(loadPath.toUri().toString());
+        LOG.error("File not found " + loadPath.toUri().toString());
+        throw new FileNotFoundException(ErrorMsg.REPL_LOAD_PATH_NOT_FOUND.getMsg());
+      }
+
+      // Ths config is set to make sure that in case of s3 replication, move is skipped.
+      try {
+        Warehouse wh = new Warehouse(conf);
+        Path filePath = wh.getWhRoot();
+        if (ifEnableMoveOptimization(filePath, conf)) {
+          conf.setBoolVar(REPL_ENABLE_MOVE_OPTIMIZATION, true);
+          LOG.info(" Set move optimization to true for warehouse " + filePath.toString());
+        }
+      } catch (Exception e) {
+        throw new SemanticException(e.getMessage(), e);
       }
 
       // Now, the dumped path can be one of three things:
@@ -303,258 +370,81 @@ public class ReplicationSemanticAnalyzer extends BaseSemanticAnalyzer {
       DumpMetaData dmd = new DumpMetaData(loadPath, conf);
 
       boolean evDump = false;
-      if (dmd.isIncrementalDump()){
+      // we will decide what hdfs locations needs to be copied over here as well.
+      if (dmd.isIncrementalDump()) {
         LOG.debug("{} contains an incremental dump", loadPath);
         evDump = true;
       } else {
         LOG.debug("{} contains an bootstrap dump", loadPath);
       }
-
-      if ((!evDump) && (tblNameOrPattern != null) && !(tblNameOrPattern.isEmpty())) {
-        ReplLoadWork replLoadWork =
-            new ReplLoadWork(conf, loadPath.toString(), dbNameOrPattern, tblNameOrPattern,
-                queryState.getLineageState(), SessionState.get().getTxnMgr().getCurrentTxnId());
-        rootTasks.add(TaskFactory.get(replLoadWork, conf, true));
-        return;
-      }
-
-      FileStatus[] srcs = LoadSemanticAnalyzer.matchFilesOrDir(fs, loadPath);
-      if (srcs == null || (srcs.length == 0)) {
-        LOG.warn("Nothing to load at {}", loadPath.toUri().toString());
-        return;
-      }
-
-      FileStatus[] dirsInLoadPath = fs.listStatus(loadPath, EximUtil.getDirectoryFilter(fs));
-
-      if ((dirsInLoadPath == null) || (dirsInLoadPath.length == 0)) {
-        throw new IllegalArgumentException("No data to load in path " + loadPath.toUri().toString());
-      }
-
-      if (!evDump){
-        // not an event dump, not a table dump - thus, a db dump
-        if ((dbNameOrPattern != null) && (dirsInLoadPath.length > 1)) {
-          LOG.debug("Found multiple dirs when we expected 1:");
-          for (FileStatus d : dirsInLoadPath) {
-            LOG.debug("> " + d.getPath().toUri().toString());
-          }
-          throw new IllegalArgumentException(
-              "Multiple dirs in "
-                  + loadPath.toUri().toString()
-                  + " does not correspond to REPL LOAD expecting to load to a singular destination point.");
-        }
-
-        ReplLoadWork replLoadWork = new ReplLoadWork(conf, loadPath.toString(), dbNameOrPattern,
-            queryState.getLineageState(), SessionState.get().getTxnMgr().getCurrentTxnId());
-        rootTasks.add(TaskFactory.get(replLoadWork, conf, true));
-        //
-        //        for (FileStatus dir : dirsInLoadPath) {
-        //          analyzeDatabaseLoad(dbNameOrPattern, fs, dir);
-        //        }
-      } else {
-        // Event dump, each sub-dir is an individual event dump.
-        // We need to guarantee that the directory listing we got is in order of evid.
-        Arrays.sort(dirsInLoadPath, new EventDumpDirComparator());
-
-        Task<? extends Serializable> evTaskRoot = TaskFactory.get(new DependencyCollectionWork(), conf);
-        Task<? extends Serializable> taskChainTail = evTaskRoot;
-
-        ReplLogger replLogger = new IncrementalLoadLogger(dbNameOrPattern,
-                loadPath.toString(), dirsInLoadPath.length);
-
-        for (FileStatus dir : dirsInLoadPath){
-          LOG.debug("Loading event from {} to {}.{}", dir.getPath().toUri(), dbNameOrPattern, tblNameOrPattern);
-
-          // event loads will behave similar to table loads, with one crucial difference
-          // precursor order is strict, and each event must be processed after the previous one.
-          // The way we handle this strict order is as follows:
-          // First, we start with a taskChainTail which is a dummy noop task (a DependecyCollectionTask)
-          // at the head of our event chain. For each event we process, we tell analyzeTableLoad to
-          // create tasks that use the taskChainTail as a dependency. Then, we collect all those tasks
-          // and introduce a new barrier task(also a DependencyCollectionTask) which depends on all
-          // these tasks. Then, this barrier task becomes our new taskChainTail. Thus, we get a set of
-          // tasks as follows:
-          //
-          //                 --->ev1.task1--                          --->ev2.task1--
-          //                /               \                        /               \
-          //  evTaskRoot-->*---->ev1.task2---*--> ev1.barrierTask-->*---->ev2.task2---*->evTaskChainTail
-          //                \               /
-          //                 --->ev1.task3--
-          //
-          // Once this entire chain is generated, we add evTaskRoot to rootTasks, so as to execute the
-          // entire chain
-
-          String locn = dir.getPath().toUri().toString();
-          DumpMetaData eventDmd = new DumpMetaData(new Path(locn), conf);
-          MessageHandler.Context context = new MessageHandler.Context(dbNameOrPattern,
-                                                          tblNameOrPattern, locn, taskChainTail,
-                                                          eventDmd, conf, db, ctx, LOG);
-          List<Task<? extends Serializable>> evTasks = analyzeEventLoad(context);
-
-          if ((evTasks != null) && (!evTasks.isEmpty())){
-            ReplStateLogWork replStateLogWork = new ReplStateLogWork(replLogger,
-                                                          dir.getPath().getName(),
-                                                          eventDmd.getDumpType().toString());
-            Task<? extends Serializable> barrierTask = TaskFactory.get(replStateLogWork, conf);
-            for (Task<? extends Serializable> t : evTasks){
-              t.addDependentTask(barrierTask);
-              LOG.debug("Added {}:{} as a precursor of barrier task {}:{}",
-                  t.getClass(), t.getId(), barrierTask.getClass(), barrierTask.getId());
-            }
-            LOG.debug("Updated taskChainTail from {}:{} to {}:{}",
-                taskChainTail.getClass(), taskChainTail.getId(), barrierTask.getClass(), barrierTask.getId());
-            taskChainTail = barrierTask;
-          }
-        }
-
-        // If any event is there and db name is known, then dump the start and end logs
-        if (!evTaskRoot.equals(taskChainTail)) {
-          Map<String, String> dbProps = new HashMap<>();
-          dbProps.put(ReplicationSpec.KEY.CURR_STATE_ID.toString(), String.valueOf(dmd.getEventTo()));
-          ReplStateLogWork replStateLogWork = new ReplStateLogWork(replLogger, dbProps);
-          Task<? extends Serializable> barrierTask = TaskFactory.get(replStateLogWork, conf);
-          taskChainTail.addDependentTask(barrierTask);
-          LOG.debug("Added {}:{} as a precursor of barrier task {}:{}",
-                  taskChainTail.getClass(), taskChainTail.getId(),
-                  barrierTask.getClass(), barrierTask.getId());
-
-          replLogger.startLog();
-        }
-        rootTasks.add(evTaskRoot);
-      }
-
+      ReplLoadWork replLoadWork = new ReplLoadWork(conf, loadPath.toString(), dbNameOrPattern,
+          tblNameOrPattern, queryState.getLineageState(), evDump, dmd.getEventTo(),
+          dirLocationsToCopy(loadPath, evDump));
+      rootTasks.add(TaskFactory.get(replLoadWork, conf));
     } catch (Exception e) {
       // TODO : simple wrap & rethrow for now, clean up with error codes
-      throw new SemanticException(e);
+      throw new SemanticException(e.getMessage(), e);
     }
   }
 
-  private List<Task<? extends Serializable>> analyzeEventLoad(
-          MessageHandler.Context context)
-      throws SemanticException {
-    MessageHandler messageHandler = context.dmd.getDumpType().handler();
-    List<Task<? extends Serializable>> tasks = messageHandler.handle(context);
+  private List<DirCopyWork> dirLocationsToCopy(Path loadPath, boolean isIncrementalPhase)
+      throws HiveException, IOException {
+    List<DirCopyWork> list = new ArrayList<>();
+    String baseDir = conf.get(HiveConf.ConfVars.REPL_EXTERNAL_TABLE_BASE_DIR.varname);
+    // this is done to remove any scheme related information that will be present in the base path
+    // specifically when we are replicating to cloud storage
+    Path basePath = new Path(baseDir);
 
-    if (context.precursor != null) {
-      for (Task<? extends Serializable> t : tasks) {
-        context.precursor.addDependentTask(t);
-        LOG.debug("Added {}:{} as a precursor of {}:{}",
-                context.precursor.getClass(), context.precursor.getId(), t.getClass(), t.getId());
+    for (String location : new Reader(conf, loadPath, isIncrementalPhase).sourceLocationsToCopy()) {
+      Path sourcePath = new Path(location);
+      Path targetPath = ReplExternalTables.externalTableDataPath(conf, basePath, sourcePath);
+      list.add(new DirCopyWork(sourcePath, targetPath));
+    }
+    return list;
+  }
+
+  private void setConfigs(ASTNode node) throws SemanticException {
+    Map<String, String> replConfigs = DDLSemanticAnalyzer.getProps(node);
+    if (null != replConfigs) {
+      for (Map.Entry<String, String> config : replConfigs.entrySet()) {
+        String key = config.getKey();
+        // don't set the query id in the config
+        if (key.equalsIgnoreCase(HIVEQUERYID.varname)) {
+          String queryTag = config.getValue();
+          if (!StringUtils.isEmpty(queryTag)) {
+            QueryState.setApplicationTag(conf, queryTag);
+          }
+          queryState.setQueryTag(queryTag);
+        } else {
+          conf.set(key, config.getValue());
+        }
+      }
+
+      // As hive conf is changed, need to get the Hive DB again with it.
+      try {
+        db = Hive.get(conf);
+      } catch (HiveException e) {
+        throw new SemanticException(e);
       }
     }
-
-    inputs.addAll(messageHandler.readEntities());
-    outputs.addAll(messageHandler.writeEntities());
-    return addUpdateReplStateTasks(StringUtils.isEmpty(context.tableName),
-                            messageHandler.getUpdatedMetadata(), tasks);
-  }
-
-  private Task<? extends Serializable> tableUpdateReplStateTask(
-                                                        String dbName,
-                                                        String tableName,
-                                                        Map<String, String> partSpec,
-                                                        String replState,
-                                                        Task<? extends Serializable> preCursor) {
-    HashMap<String, String> mapProp = new HashMap<>();
-    mapProp.put(ReplicationSpec.KEY.CURR_STATE_ID.toString(), replState);
-
-    AlterTableDesc alterTblDesc =  new AlterTableDesc(
-            AlterTableDesc.AlterTableTypes.ADDPROPS, new ReplicationSpec(replState, replState));
-    alterTblDesc.setProps(mapProp);
-    alterTblDesc.setOldName(StatsUtils.getFullyQualifiedTableName(dbName, tableName));
-    alterTblDesc.setPartSpec((HashMap<String, String>)partSpec);
-
-    Task<? extends Serializable> updateReplIdTask = TaskFactory.get(
-                      new DDLWork(inputs, outputs, alterTblDesc), conf);
-
-    // Link the update repl state task with dependency collection task
-    if (preCursor != null) {
-      preCursor.addDependentTask(updateReplIdTask);
-      LOG.debug("Added {}:{} as a precursor of {}:{}",
-              preCursor.getClass(), preCursor.getId(),
-              updateReplIdTask.getClass(), updateReplIdTask.getId());
-    }
-    return updateReplIdTask;
-  }
-
-  private Task<? extends Serializable> dbUpdateReplStateTask(
-                                                        String dbName,
-                                                        String replState,
-                                                        Task<? extends Serializable> preCursor) {
-    HashMap<String, String> mapProp = new HashMap<>();
-    mapProp.put(ReplicationSpec.KEY.CURR_STATE_ID.toString(), replState);
-
-    AlterDatabaseDesc alterDbDesc = new AlterDatabaseDesc(
-                            dbName, mapProp, new ReplicationSpec(replState, replState));
-    Task<? extends Serializable> updateReplIdTask = TaskFactory.get(
-                            new DDLWork(inputs, outputs, alterDbDesc), conf);
-
-    // Link the update repl state task with dependency collection task
-    if (preCursor != null) {
-      preCursor.addDependentTask(updateReplIdTask);
-      LOG.debug("Added {}:{} as a precursor of {}:{}",
-              preCursor.getClass(), preCursor.getId(),
-              updateReplIdTask.getClass(), updateReplIdTask.getId());
-    }
-    return updateReplIdTask;
-  }
-
-  private List<Task<? extends Serializable>> addUpdateReplStateTasks(
-          boolean isDatabaseLoad,
-          UpdatedMetaDataTracker updatedMetadata,
-          List<Task<? extends Serializable>> importTasks) {
-    String replState = updatedMetadata.getReplicationState();
-    String dbName = updatedMetadata.getDatabase();
-    String tableName = updatedMetadata.getTable();
-
-    // If no import tasks generated by the event or no table updated for table level load, then no
-    // need to update the repl state to any object.
-    if (importTasks.isEmpty() || (!isDatabaseLoad && (tableName == null))) {
-      LOG.debug("No objects need update of repl state: Either 0 import tasks or table level load");
-      return importTasks;
-    }
-
-    // Create a barrier task for dependency collection of import tasks
-    Task<? extends Serializable> barrierTask = TaskFactory.get(new DependencyCollectionWork(), conf);
-
-    // Link import tasks to the barrier task which will in-turn linked with repl state update tasks
-    for (Task<? extends Serializable> t : importTasks){
-      t.addDependentTask(barrierTask);
-      LOG.debug("Added {}:{} as a precursor of barrier task {}:{}",
-              t.getClass(), t.getId(), barrierTask.getClass(), barrierTask.getId());
-    }
-
-    List<Task<? extends Serializable>> tasks = new ArrayList<>();
-    Task<? extends Serializable> updateReplIdTask;
-
-    // If any partition is updated, then update repl state in partition object
-    for (final Map<String, String> partSpec : updatedMetadata.getPartitions()) {
-      updateReplIdTask = tableUpdateReplStateTask(dbName, tableName, partSpec, replState, barrierTask);
-      tasks.add(updateReplIdTask);
-    }
-
-    if (tableName != null) {
-      // If any table/partition is updated, then update repl state in table object
-      updateReplIdTask = tableUpdateReplStateTask(dbName, tableName, null, replState, barrierTask);
-      tasks.add(updateReplIdTask);
-    }
-
-    // For table level load, need not update replication state for the database
-    if (isDatabaseLoad) {
-      // If any table/partition is updated, then update repl state in db object
-      updateReplIdTask = dbUpdateReplStateTask(dbName, replState, barrierTask);
-      tasks.add(updateReplIdTask);
-    }
-
-    // At least one task would have been added to update the repl state
-    return tasks;
   }
 
   // REPL STATUS
-  private void initReplStatus(ASTNode ast) {
-    int numChildren = ast.getChildCount();
+  private void initReplStatus(ASTNode ast) throws SemanticException{
     dbNameOrPattern = PlanUtils.stripQuotes(ast.getChild(0).getText());
-    if (numChildren > 1) {
-      tblNameOrPattern = PlanUtils.stripQuotes(ast.getChild(1).getText());
+    int numChildren = ast.getChildCount();
+    for (int i = 1; i < numChildren; i++) {
+      ASTNode childNode = (ASTNode) ast.getChild(i);
+      switch (childNode.getToken().getType()) {
+      case TOK_TABNAME:
+        tblNameOrPattern = PlanUtils.stripQuotes(childNode.getChild(0).getText());
+        break;
+      case TOK_REPL_CONFIG:
+        setConfigs((ASTNode) childNode.getChild(0));
+        break;
+      default:
+        throw new SemanticException("Unrecognized token in REPL STATUS statement");
+      }
     }
   }
 

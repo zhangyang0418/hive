@@ -59,6 +59,7 @@ public class AvroSerDe extends AbstractSerDe {
   public static final String VARCHAR_TYPE_NAME = "varchar";
   public static final String DATE_TYPE_NAME = "date";
   public static final String TIMESTAMP_TYPE_NAME = "timestamp-millis";
+  public static final String WRITER_TIME_ZONE = "writer.time.zone";
   public static final String AVRO_PROP_LOGICAL_TYPE = "logicalType";
   public static final String AVRO_PROP_PRECISION = "precision";
   public static final String AVRO_PROP_SCALE = "scale";
@@ -136,6 +137,11 @@ public class AvroSerDe extends AbstractSerDe {
     this.columnNames = StringInternUtils.internStringsInList(aoig.getColumnNames());
     this.columnTypes = aoig.getColumnTypes();
     this.oi = aoig.getObjectInspector();
+
+    if(!badSchema) {
+      this.avroSerializer = new AvroSerializer();
+      this.avroDeserializer = new AvroDeserializer(configuration);
+    }
   }
 
   private boolean hasExternalSchema(Properties properties) {
@@ -214,7 +220,7 @@ public class AvroSerDe extends AbstractSerDe {
     if(badSchema) {
       throw new BadSchemaException();
     }
-    return getSerializer().serialize(o, objectInspector, columnNames, columnTypes, schema);
+    return avroSerializer.serialize(o, objectInspector, columnNames, columnTypes, schema);
   }
 
   @Override
@@ -222,7 +228,7 @@ public class AvroSerDe extends AbstractSerDe {
     if(badSchema) {
       throw new BadSchemaException();
     }
-    return getDeserializer().deserialize(columnNames, columnTypes, writable, schema);
+    return avroDeserializer.deserialize(columnNames, columnTypes, writable, schema);
   }
 
   @Override
@@ -234,22 +240,6 @@ public class AvroSerDe extends AbstractSerDe {
   public SerDeStats getSerDeStats() {
     // No support for statistics. That seems to be a popular answer.
     return null;
-  }
-
-  private AvroDeserializer getDeserializer() {
-    if(avroDeserializer == null) {
-      avroDeserializer = new AvroDeserializer();
-    }
-
-    return avroDeserializer;
-  }
-
-  private AvroSerializer getSerializer() {
-    if(avroSerializer == null) {
-      avroSerializer = new AvroSerializer();
-    }
-
-    return avroSerializer;
   }
 
   @Override

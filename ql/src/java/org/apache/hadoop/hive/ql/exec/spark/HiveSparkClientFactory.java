@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.hive.common.LogUtils;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hive.spark.client.SparkClientUtilities;
+import org.apache.hive.spark.client.rpc.RpcConfiguration;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -41,7 +42,6 @@ import org.apache.hadoop.hive.ql.exec.vector.VectorizedRowBatch;
 import org.apache.hadoop.hive.ql.io.HiveKey;
 import org.apache.hadoop.io.BytesWritable;
 import org.apache.hadoop.io.Writable;
-import org.apache.hive.spark.client.rpc.RpcConfiguration;
 import org.apache.spark.SparkConf;
 
 import com.google.common.base.Joiner;
@@ -63,8 +63,9 @@ public class HiveSparkClientFactory {
   @VisibleForTesting
   public static final String SPARK_CLONE_CONFIGURATION = "spark.hadoop.cloneConf";
 
-  public static HiveSparkClient createHiveSparkClient(HiveConf hiveconf, String sessionId) throws Exception {
-    Map<String, String> sparkConf = initiateSparkConf(hiveconf, sessionId);
+  public static HiveSparkClient createHiveSparkClient(HiveConf hiveconf, String sparkSessionId,
+                                                      String hiveSessionId) throws Exception {
+    Map<String, String> sparkConf = initiateSparkConf(hiveconf, hiveSessionId);
 
     // Submit spark job through local spark context while spark master is local mode, otherwise submit
     // spark job through remote spark context.
@@ -73,11 +74,11 @@ public class HiveSparkClientFactory {
       // With local spark context, all user sessions share the same spark context.
       return LocalHiveSparkClient.getInstance(generateSparkConf(sparkConf), hiveconf);
     } else {
-      return new RemoteHiveSparkClient(hiveconf, sparkConf);
+      return new RemoteHiveSparkClient(hiveconf, sparkConf, sparkSessionId);
     }
   }
 
-  public static Map<String, String> initiateSparkConf(HiveConf hiveConf, String sessionId) {
+  public static Map<String, String> initiateSparkConf(HiveConf hiveConf, String hiveSessionId) {
     Map<String, String> sparkConf = new HashMap<String, String>();
     HBaseConfiguration.addHbaseResources(hiveConf);
 
@@ -85,9 +86,9 @@ public class HiveSparkClientFactory {
     sparkConf.put("spark.master", SPARK_DEFAULT_MASTER);
     final String appNameKey = "spark.app.name";
     String appName = hiveConf.get(appNameKey);
-    final String sessionIdString = " (sessionId = " + sessionId + ")";
+    final String sessionIdString = " (hiveSessionId = " + hiveSessionId + ")";
     if (appName == null) {
-      if (sessionId == null) {
+      if (hiveSessionId == null) {
         appName = SPARK_DEFAULT_APP_NAME;
       } else {
         appName = SPARK_DEFAULT_APP_NAME + sessionIdString;
@@ -105,7 +106,7 @@ public class HiveSparkClientFactory {
       inputStream = HiveSparkClientFactory.class.getClassLoader()
         .getResourceAsStream(SPARK_DEFAULT_CONF_FILE);
       if (inputStream != null) {
-        LOG.info("loading spark properties from: " + SPARK_DEFAULT_CONF_FILE);
+        LOG.info("Loading Spark properties from: " + SPARK_DEFAULT_CONF_FILE);
         Properties properties = new Properties();
         properties.load(new InputStreamReader(inputStream, CharsetNames.UTF_8));
         for (String propertyName : properties.stringPropertyNames()) {
@@ -119,7 +120,7 @@ public class HiveSparkClientFactory {
         }
       }
     } catch (IOException e) {
-      LOG.info("Failed to open spark configuration file: "
+      LOG.info("Failed to open Spark configuration file: "
         + SPARK_DEFAULT_CONF_FILE, e);
     } finally {
       if (inputStream != null) {
@@ -198,13 +199,11 @@ public class HiveSparkClientFactory {
         LOG.debug(String.format(
           "Pass Oozie configuration (%s -> %s).", propertyName, LogUtils.maskIfPassword(propertyName,value)));
       }
-
       if (RpcConfiguration.HIVE_SPARK_RSC_CONFIGS.contains(propertyName)) {
         String value = RpcConfiguration.getValue(hiveConf, propertyName);
         sparkConf.put(propertyName, value);
-        LOG.debug(String.format(
-          "load RPC property from hive configuration (%s -> %s).",
-          propertyName, LogUtils.maskIfPassword(propertyName,value)));
+        LOG.debug(String.format("load RPC property from hive configuration (%s -> %s).", propertyName,
+            LogUtils.maskIfPassword(propertyName, value)));
       }
     }
 

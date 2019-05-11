@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -491,8 +491,8 @@ public class ZooKeeperHiveLockManager implements HiveLockManager {
       } catch (Exception e) {
         if (tryNum >= numRetriesForUnLock) {
           String name = ((ZooKeeperHiveLock)hiveLock).getPath();
-          LOG.error("Node " + name + " can not be deleted after " + numRetriesForUnLock + " attempts.");
-          throw new LockException(e);
+          throw new LockException("Node " + name + " can not be deleted after " + numRetriesForUnLock + " attempts.",
+              e);
         }
       }
     } while (tryNum < numRetriesForUnLock);
@@ -738,7 +738,7 @@ public class ZooKeeperHiveLockManager implements HiveLockManager {
   private int getSequenceNumber(String resPath, String path) {
     String tst = resPath.substring(path.length());
     try {
-      return (new Integer(tst)).intValue();
+      return Integer.parseInt(tst);
     } catch (Exception e) {
       return -1; // invalid number
     }

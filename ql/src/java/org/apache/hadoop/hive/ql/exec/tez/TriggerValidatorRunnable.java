@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.apache.hadoop.hive.ql.wm.Action;
 import org.apache.hadoop.hive.ql.wm.SessionTriggerProvider;
+import org.apache.hadoop.hive.ql.wm.TimeCounterLimit;
 import org.apache.hadoop.hive.ql.wm.Trigger;
 import org.apache.hadoop.hive.ql.wm.TriggerActionHandler;
 import org.apache.hadoop.hive.ql.wm.WmContext;
@@ -48,11 +49,15 @@ public class TriggerValidatorRunnable implements Runnable {
       for (TezSessionState sessionState : sessions) {
         WmContext wmContext = sessionState.getWmContext();
         if (wmContext != null && !wmContext.isQueryCompleted()
-          && !wmContext.getCurrentCounters().isEmpty()) {
+          && !wmContext.getSubscribedCounters().isEmpty()) {
           Map<String, Long> currentCounters = wmContext.getCurrentCounters();
+          wmContext.updateElapsedTimeCounter();
           for (Trigger currentTrigger : triggers) {
             String desiredCounter = currentTrigger.getExpression().getCounterLimit().getName();
             // there could be interval where desired counter value is not populated by the time we make this check
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Validating trigger: {} against currentCounters: {}", currentTrigger, currentCounters);
+            }
             if (currentCounters.containsKey(desiredCounter)) {
               long currentCounterValue = currentCounters.get(desiredCounter);
               if (currentTrigger.apply(currentCounterValue)) {
@@ -67,9 +72,15 @@ public class TriggerValidatorRunnable implements Runnable {
                       currentCounterValue);
                     violatedSessions.put(sessionState, currentTrigger);
                     LOG.info("KILL trigger replacing MOVE for query {}", queryId);
-                  } else {
+                  } else if (existingTrigger.getAction().getType().equals(Action.Type.MOVE_TO_POOL) &&
+                    currentTrigger.getAction().getType().equals(Action.Type.MOVE_TO_POOL)){
                     // if multiple MOVE happens, only first move will be chosen
                     LOG.warn("Conflicting MOVE triggers ({} and {}). Choosing the first MOVE trigger: {}",
+                      existingTrigger, currentTrigger, existingTrigger.getName());
+                  } else if (existingTrigger.getAction().getType().equals(Action.Type.KILL_QUERY) &&
+                    currentTrigger.getAction().getType().equals(Action.Type.KILL_QUERY)){
+                    // if multiple KILL happens, only first kill will be chosen
+                    LOG.warn("Conflicting KILL triggers ({} and {}). Choosing the first KILL trigger: {}",
                       existingTrigger, currentTrigger, existingTrigger.getName());
                   }
                 } else {

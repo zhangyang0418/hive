@@ -51,7 +51,6 @@ stmt :
      | collect_stats_stmt
      | close_stmt
      | cmp_stmt
-     | copy_from_ftp_stmt
      | copy_from_local_stmt
      | copy_stmt
      | commit_stmt
@@ -228,7 +227,7 @@ create_local_temp_table_stmt :
      ;
      
 create_table_definition :
-      (T_AS? T_OPEN_P select_stmt T_CLOSE_P | T_AS? select_stmt | T_OPEN_P create_table_columns T_CLOSE_P) create_table_options?
+      (T_AS? T_OPEN_P select_stmt T_CLOSE_P | T_AS? select_stmt | T_OPEN_P create_table_columns T_CLOSE_P | T_LIKE table_name) create_table_options?
      ;
      
 create_table_columns :         
@@ -364,6 +363,7 @@ alter_table_add_constraint_item :
      
 dtype :                  // Data types
        T_CHAR
+     | T_CHARACTER
      | T_BIGINT
      | T_BINARY_DOUBLE
      | T_BINARY_FLOAT
@@ -618,10 +618,6 @@ cmp_source :
       (table_name where_clause? | T_OPEN_P select_stmt T_CLOSE_P) (T_AT ident)?
      ;
      
-copy_from_ftp_stmt :  
-       T_COPY T_FROM T_FTP expr copy_ftp_option*
-     ;
-
 copy_from_local_stmt :  // COPY FROM LOCAL statement
        T_COPY T_FROM T_LOCAL copy_source (T_COMMA copy_source)* T_TO copy_target copy_file_option*
      ;
@@ -650,18 +646,6 @@ copy_file_option :
      | T_IGNORE
      | T_OVERWRITE
      ;
-     
-copy_ftp_option :
-       T_USER expr
-     | T_PWD expr
-     | T_DIR (file_name | expr) 
-     | T_FILES expr
-     | T_NEW
-     | T_OVERWRITE
-     | T_SUBDIR
-     | T_SESSIONS expr
-     | T_TO T_LOCAL? (file_name | expr)
- ;
      
 commit_stmt :           // COMMIT statement
        T_COMMIT T_WORK?
@@ -1199,7 +1183,7 @@ timestamp_literal :                       // TIMESTAMP 'YYYY-MM-DD HH:MI:SS.FFF'
      ;
      
 ident :
-       (L_ID | non_reserved_words) ('.' (L_ID | non_reserved_words))* 
+       '-'? (L_ID | non_reserved_words) ('.' (L_ID | non_reserved_words))*
      ;
      
 string :                                   // String literal (single or double quoted)
@@ -1345,7 +1329,6 @@ non_reserved_words :                      // Tokens that are not reserved words 
      | T_FORMAT     
      | T_FOUND        
      | T_FROM  
-     | T_FTP     
      | T_FULL     
      | T_FUNCTION
      | T_GET
@@ -1669,7 +1652,6 @@ T_FOREIGN         : F O R E I G N ;
 T_FORMAT          : F O R M A T ;
 T_FOUND           : F O U N D ;
 T_FROM            : F R O M ; 
-T_FTP             : F T P ;
 T_FULL            : F U L L ;
 T_FUNCTION        : F U N C T I O N ;
 T_GET             : G E T ;

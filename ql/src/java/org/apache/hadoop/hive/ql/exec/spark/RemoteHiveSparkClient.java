@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.ql.exec.spark;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 
@@ -33,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hive.ql.io.NullScanFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -88,18 +90,20 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
   private transient List<URI> localFiles = new ArrayList<URI>();
 
   private final transient long sparkClientTimtout;
+  private final String sessionId;
 
-  RemoteHiveSparkClient(HiveConf hiveConf, Map<String, String> conf) throws Exception {
+  RemoteHiveSparkClient(HiveConf hiveConf, Map<String, String> conf, String sessionId) throws Exception {
     this.hiveConf = hiveConf;
     sparkClientTimtout = hiveConf.getTimeVar(HiveConf.ConfVars.SPARK_CLIENT_FUTURE_TIMEOUT,
         TimeUnit.SECONDS);
     sparkConf = HiveSparkClientFactory.generateSparkConf(conf);
     this.conf = conf;
+    this.sessionId = sessionId;
     createRemoteClient();
   }
 
   private void createRemoteClient() throws Exception {
-    remoteClient = SparkClientFactory.createClient(conf, hiveConf);
+    remoteClient = SparkClientFactory.createClient(conf, hiveConf, sessionId);
 
     if (HiveConf.getBoolVar(hiveConf, ConfVars.HIVE_PREWARM_ENABLED) &&
             (SparkClientUtilities.isYarnMaster(hiveConf.get("spark.master")) ||
@@ -207,6 +211,10 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
     FileSystem fs = emptyScratchDir.getFileSystem(jobConf);
     fs.mkdirs(emptyScratchDir);
 
+    // make sure NullScanFileSystem can be loaded - HIVE-18442
+    jobConf.set("fs." + NullScanFileSystem.getBaseScheme() + ".impl",
+        NullScanFileSystem.class.getCanonicalName());
+
     byte[] jobConfBytes = KryoSerializer.serializeJobConf(jobConf);
     byte[] scratchDirBytes = KryoSerializer.serialize(emptyScratchDir);
     byte[] sparkWorkBytes = KryoSerializer.serialize(sparkWork);
@@ -221,7 +229,7 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
     return new RemoteSparkJobRef(hiveConf, jobHandle, sparkJobStatus);
   }
 
-  private void refreshLocalResources(SparkWork sparkWork, HiveConf conf) throws IOException {
+  private synchronized void refreshLocalResources(SparkWork sparkWork, HiveConf conf) throws IOException {
     // add hive-exec jar
     addJars((new JobConf(this.getClass())).getJar());
 
@@ -256,6 +264,7 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
     addResources(addedArchives);
   }
 
+  //This method is not thread safe
   private void addResources(String addedFiles) throws IOException {
     for (String addedFile : CSV_SPLITTER.split(Strings.nullToEmpty(addedFiles))) {
       try {
@@ -273,6 +282,7 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
     }
   }
 
+  //This method is not thread safe
   private void addJars(String addedJars) throws IOException {
     for (String addedJar : CSV_SPLITTER.split(Strings.nullToEmpty(addedJars))) {
       try {
@@ -299,7 +309,8 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
     localJars.clear();
   }
 
-  private static class JobStatusJob implements Job<Serializable> {
+  @VisibleForTesting
+  static class JobStatusJob implements Job<Serializable> {
 
     private static final long serialVersionUID = 1L;
     private final byte[] jobConfBytes;
@@ -351,6 +362,9 @@ public class RemoteHiveSparkClient implements HiveSparkClient {
         new SparkPlanGenerator(jc.sc(), null, localJobConf, localScratchDir, sparkReporter);
       SparkPlan plan = gen.generate(localSparkWork);
 
+      // We get the query name for this SparkTask and set it to the description for the associated
+      // Spark job; query names are guaranteed to be unique for each Spark job because the task id
+      // is concatenated to the end of the query name
       jc.sc().setJobGroup("queryId = " + localSparkWork.getQueryId(), DagUtils.getQueryName(localJobConf));
 
       // Execute generated plan.

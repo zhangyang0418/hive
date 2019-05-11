@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -33,6 +33,7 @@ import org.apache.hadoop.hive.llap.registry.LlapServiceInstance;
 import org.apache.hadoop.hive.llap.registry.LlapServiceInstanceSet;
 import org.apache.hadoop.hive.llap.registry.impl.InactiveServiceInstance;
 import org.apache.hadoop.hive.llap.registry.impl.LlapRegistryService;
+import org.apache.hadoop.hive.registry.ServiceInstanceSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -43,6 +44,7 @@ public class LlapClusterStateForCompile {
   private volatile Long lastClusterUpdateNs;
   private volatile Integer noConfigNodeCount, executorCount;
   private volatile int numExecutorsPerNode = -1;
+  private volatile long memoryPerInstance = -1;
   private LlapRegistryService svc;
   private final Configuration conf;
   private final long updateIntervalNs;
@@ -92,6 +94,14 @@ public class LlapClusterStateForCompile {
     return numExecutorsPerNode;
   }
 
+  public long getMemoryPerInstance() {
+    return memoryPerInstance;
+  }
+
+  public long getMemoryPerExecutor() {
+    return getMemoryPerInstance() / getNumExecutorsPerNode();
+  }
+
   private boolean isUpdateNeeded() {
     Long lastUpdateLocal = lastClusterUpdateNs;
     if (lastUpdateLocal == null) return true;
@@ -112,7 +122,7 @@ public class LlapClusterStateForCompile {
           return false; // Don't fail; this is best-effort.
         }
       }
-      LlapServiceInstanceSet instances;
+      ServiceInstanceSet<LlapServiceInstance> instances;
       try {
         instances = svc.getInstances(10);
       } catch (IOException e) {
@@ -132,6 +142,9 @@ public class LlapClusterStateForCompile {
           executorsLocal += numExecutors;
           if (numExecutorsPerNode == -1) {
             numExecutorsPerNode = numExecutors;
+          }
+          if (memoryPerInstance == -1) {
+            memoryPerInstance = si.getResource().getMemorySize() * 1024L * 1024L;
           }
         } catch (NumberFormatException e) {
           ++noConfigNodesLocal;

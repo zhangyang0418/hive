@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -40,8 +40,8 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
-import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.common.BlobStorageUtils;
+import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.TaskRunner;
 import org.apache.hadoop.hive.ql.exec.Utilities;
@@ -58,6 +58,9 @@ import org.apache.hadoop.hive.ql.parse.ExplainConfiguration.AnalyzeState;
 import org.apache.hadoop.hive.ql.parse.HiveParser;
 import org.apache.hadoop.hive.ql.parse.QB;
 import org.apache.hadoop.hive.ql.plan.LoadTableDesc;
+import org.apache.hadoop.hive.ql.plan.mapper.EmptyStatsSource;
+import org.apache.hadoop.hive.ql.plan.mapper.PlanMapper;
+import org.apache.hadoop.hive.ql.plan.mapper.StatsSource;
 import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.ql.wm.WmContext;
 import org.apache.hadoop.hive.shims.ShimLoader;
@@ -65,11 +68,13 @@ import org.apache.hadoop.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+
 /**
  * Context for Semantic Analyzers. Usage: not reusable - construct a new one for
  * each query should call clear() at end of use to remove temporary folders
  */
 public class Context {
+
   private boolean isHDFSCleanup;
   private Path resFile;
   private Path resDir;
@@ -94,14 +99,17 @@ public class Context {
   // Keeps track of scratch directories created for different scheme/authority
   private final Map<String, Path> fsScratchDirs = new HashMap<String, Path>();
 
-  private final Configuration conf;
+  // keeps track of result cache dir for the query, later cleaned up by context cleanup
+  private Path fsResultCacheDirs = null;
+
+  private Configuration conf;
   protected int pathid = 10000;
   protected ExplainConfiguration explainConfig = null;
   protected String cboInfo;
   protected boolean cboSucceeded;
+  protected String optimizedSql;
+  protected String calcitePlan;
   protected String cmd = "";
-  // number of previous attempts
-  protected int tryCount = 0;
   private TokenRewriteStream tokenRewriteStream;
   // Holds the qualified name to tokenRewriteStream for the views
   // referenced by the query. This is used to rewrite the view AST
@@ -141,6 +149,9 @@ public class Context {
   // Identify whether the query involves an UPDATE, DELETE or MERGE
   private boolean isUpdateDeleteMerge;
 
+  // Whether the analyzer has been instantiated to read and load materialized view plans
+  private boolean isLoadingMaterializedView;
+
   /**
    * This determines the prefix of the
    * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer.Phase1Ctx#dest}
@@ -151,6 +162,14 @@ public class Context {
   private Map<Integer, DestClausePrefix> insertBranchToNamePrefix = new HashMap<>();
   private Operation operation = Operation.OTHER;
   private WmContext wmContext;
+
+  private boolean isExplainPlan = false;
+  private PlanMapper planMapper = new PlanMapper();
+  private StatsSource statsSource;
+  private int executionIndex;
+
+  // Load data rewrite
+  private Table tempTableForLoad;
 
   public void setOperation(Operation operation) {
     this.operation = operation;
@@ -175,6 +194,7 @@ public class Context {
     DestClausePrefix(String prefix) {
       this.prefix = prefix;
     }
+    @Override
     public String toString() {
       return prefix;
     }
@@ -183,7 +203,13 @@ public class Context {
     return getTokenRewriteStream().toString(n.getTokenStartIndex(), n.getTokenStopIndex() + 1).trim();
   }
   /**
-   * The suffix is always relative to a given ASTNode
+   * The suffix is always relative to a given ASTNode.
+   * We need this so that FileSinkOperatorS corresponding to different branches of a multi-insert
+   * statement which represents a SQL Merge statement get marked correctly with
+   * {@link org.apache.hadoop.hive.ql.io.AcidUtils.Operation}.  See usages
+   * of {@link #getDestNamePrefix(ASTNode, QB)} and
+   * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer#updating(String)} and
+   * {@link org.apache.hadoop.hive.ql.parse.SemanticAnalyzer#deleting(String)}.
    */
   public DestClausePrefix getDestNamePrefix(ASTNode curNode, QB queryBlock) {
     assert curNode != null : "must supply curNode";
@@ -227,7 +253,7 @@ public class Context {
       }
       if(!thisIsInASubquery) {
         throw new IllegalStateException("Expected '" + getMatchedText(curNode) + "' to be in sub-query or set operation.");
-      } 
+      }
       return DestClausePrefix.INSERT;
     }
     switch (operation) {
@@ -238,7 +264,7 @@ public class Context {
       case DELETE:
         return DestClausePrefix.DELETE;
       case MERGE:
-      /* This is the structrue expected here
+      /* This is the structure expected here
         HiveParser.TOK_QUERY;
           HiveParser.TOK_FROM
           HiveParser.TOK_INSERT;
@@ -250,7 +276,7 @@ public class Context {
         assert insert != null && insert.getType() == HiveParser.TOK_INSERT;
         ASTNode query = (ASTNode) insert.getParent();
         assert query != null && query.getType() == HiveParser.TOK_QUERY;
-        
+
         for(int childIdx = 1; childIdx < query.getChildCount(); childIdx++) {//1st child is TOK_FROM
           assert query.getChild(childIdx).getType() == HiveParser.TOK_INSERT;
           if(insert == query.getChild(childIdx)) {
@@ -277,6 +303,7 @@ public class Context {
   public DestClausePrefix addDestNamePrefix(int pos, DestClausePrefix prefix) {
     return insertBranchToNamePrefix.put(pos, prefix);
   }
+
   public Context(Configuration conf) throws IOException {
     this(conf, generateExecutionId());
   }
@@ -301,8 +328,60 @@ public class Context {
     viewsTokenRewriteStreams = new HashMap<>();
   }
 
+  protected Context(Context ctx) {
+    // This method creates a deep copy of context, but the copy is partial,
+    // hence it needs to be used carefully. In particular, following objects
+    // are ignored:
+    // opContext, pathToCS, cboInfo, cboSucceeded, tokenRewriteStream, viewsTokenRewriteStreams,
+    // rewrittenStatementContexts, cteTables, loadTableOutputMap, planMapper, insertBranchToNamePrefix
+    this.isHDFSCleanup = ctx.isHDFSCleanup;
+    this.resFile = ctx.resFile;
+    this.resDir = ctx.resDir;
+    this.resFs = ctx.resFs;
+    this.resDirPaths = ctx.resDirPaths;
+    this.resDirFilesNum = ctx.resDirFilesNum;
+    this.initialized = ctx.initialized;
+    this.originalTracker = ctx.originalTracker;
+    this.nonLocalScratchPath = ctx.nonLocalScratchPath;
+    this.localScratchDir = ctx.localScratchDir;
+    this.scratchDirPermission = ctx.scratchDirPermission;
+    this.fsScratchDirs.putAll(ctx.fsScratchDirs);
+    this.fsResultCacheDirs = ctx.fsResultCacheDirs;
+    this.conf = ctx.conf;
+    this.pathid = ctx.pathid;
+    this.explainConfig = ctx.explainConfig;
+    this.cmd = ctx.cmd;
+    this.executionId = ctx.executionId;
+    this.hiveLocks = ctx.hiveLocks;
+    this.hiveTxnManager = ctx.hiveTxnManager;
+    this.needLockMgr = ctx.needLockMgr;
+    this.sequencer = ctx.sequencer;
+    this.outputLockObjects.putAll(ctx.outputLockObjects);
+    this.stagingDir = ctx.stagingDir;
+    this.heartbeater = ctx.heartbeater;
+    this.skipTableMasking = ctx.skipTableMasking;
+    this.isUpdateDeleteMerge = ctx.isUpdateDeleteMerge;
+    this.isLoadingMaterializedView = ctx.isLoadingMaterializedView;
+    this.operation = ctx.operation;
+    this.wmContext = ctx.wmContext;
+    this.isExplainPlan = ctx.isExplainPlan;
+    this.statsSource = ctx.statsSource;
+    this.executionIndex = ctx.executionIndex;
+    this.viewsTokenRewriteStreams = new HashMap<>();
+    this.rewrittenStatementContexts = new HashSet<>();
+    this.opContext = new CompilationOpContext();
+  }
+
   public Map<String, Path> getFsScratchDirs() {
     return fsScratchDirs;
+  }
+
+  public void setFsResultCacheDirs(Path fsResultCacheDirs) {
+    this.fsResultCacheDirs = fsResultCacheDirs;
+  }
+
+  public Path getFsResultCacheDirs() {
+    return this.fsResultCacheDirs;
   }
 
   public Map<LoadTableDesc, WriteEntity> getLoadTableOutputMap() {
@@ -471,14 +550,14 @@ public class Context {
 
   /**
    * Create a map-reduce scratch directory on demand and return it.
+   * @param mkDir flag to indicate if scratch dir is to be created or not
    *
    */
-  public Path getMRScratchDir() {
-
+  public Path getMRScratchDir(boolean mkDir) {
     // if we are executing entirely on the client side - then
     // just (re)use the local scratch directory
     if(isLocalOnlyExecutionMode()) {
-      return getLocalScratchDir(!isExplainSkipExecution());
+      return getLocalScratchDir(mkDir);
     }
 
     try {
@@ -486,15 +565,22 @@ public class Context {
       URI uri = dir.toUri();
 
       Path newScratchDir = getScratchDir(uri.getScheme(), uri.getAuthority(),
-          !isExplainSkipExecution(), uri.getPath());
+                                         mkDir, uri.getPath());
       LOG.info("New scratch dir is " + newScratchDir);
       return newScratchDir;
     } catch (IOException e) {
       throw new RuntimeException(e);
     } catch (IllegalArgumentException e) {
       throw new RuntimeException("Error while making MR scratch "
-          + "directory - check filesystem config (" + e.getCause() + ")", e);
+                                     + "directory - check filesystem config (" + e.getCause() + ")", e);
     }
+  }
+  /**
+   * Create a map-reduce scratch directory on demand and return it.
+   *
+   */
+  public Path getMRScratchDir() {
+    return getMRScratchDir(!isExplainSkipExecution());
   }
 
   /**
@@ -505,7 +591,6 @@ public class Context {
    * - If path is on HDFS, then create a staging directory inside the path
    *
    * @param path Path used to verify the Filesystem to use for temporary directory
-   * @param isFinalJob true if the required {@link Path} will be used for the final job (e.g. the final FSOP)
    *
    * @return A path to the new temporary directory
    */
@@ -555,14 +640,40 @@ public class Context {
   /**
    * Remove any created scratch directories.
    */
+  public void removeResultCacheDir() {
+    if(this.fsResultCacheDirs != null) {
+      try {
+        Path p = this.fsResultCacheDirs;
+        FileSystem fs = p.getFileSystem(conf);
+        LOG.debug("Deleting result cache dir: {}", p);
+        fs.delete(p, true);
+        fs.cancelDeleteOnExit(p);
+      } catch (Exception e) {
+        LOG.warn("Error Removing result cache dir: "
+                     + StringUtils.stringifyException(e));
+      }
+    }
+  }
+
+  /**
+   * Remove any created scratch directories.
+   */
   public void removeScratchDir() {
+    String resultCacheDir = null;
+    if(this.fsResultCacheDirs != null) {
+      resultCacheDir = this.fsResultCacheDirs.toUri().getPath();
+    }
     for (Map.Entry<String, Path> entry : fsScratchDirs.entrySet()) {
       try {
         Path p = entry.getValue();
+        if(resultCacheDir == null || !p.toUri().getPath().contains(resultCacheDir)) {
+          // delete only the paths which aren't result cache dir path
+          // because that will be taken care by removeResultCacheDir
         FileSystem fs = p.getFileSystem(conf);
         LOG.debug("Deleting scratch dir: {}",  p);
         fs.delete(p, true);
         fs.cancelDeleteOnExit(p);
+        }
       } catch (Exception e) {
         LOG.warn("Error Removing Scratch: "
             + StringUtils.stringifyException(e));
@@ -615,6 +726,10 @@ public class Context {
     return new Path(getStagingDir(new Path(uri), !isExplainSkipExecution()), MR_PREFIX + nextPathId());
   }
 
+  public Path getMRTmpPath(boolean mkDir) {
+    return new Path(getMRScratchDir(mkDir), MR_PREFIX +
+        nextPathId());
+  }
   /**
    * Get a path to store map-reduce intermediate data in.
    *
@@ -642,14 +757,13 @@ public class Context {
    */
   public Path getExternalTmpPath(Path path) {
     URI extURI = path.toUri();
-    if (extURI.getScheme().equals("viewfs")) {
+    if ("viewfs".equals(extURI.getScheme())) {
       // if we are on viewfs we don't want to use /tmp as tmp dir since rename from /tmp/..
       // to final /user/hive/warehouse/ will fail later, so instead pick tmp dir
       // on same namespace as tbl dir.
       return getExtTmpPathRelTo(path.getParent());
     }
-    return new Path(getExternalScratchDir(extURI), EXT_PREFIX +
-        nextPathId());
+    return new Path(getExternalScratchDir(extURI), EXT_PREFIX + nextPathId());
   }
 
   /**
@@ -698,21 +812,25 @@ public class Context {
     resDirPaths = null;
   }
 
-  public void clear() throws IOException {
+  public void clear() throws IOException{
+    this.clear(true);
+  }
+
+  public void clear(boolean deleteResultDir) throws IOException {
     // First clear the other contexts created by this query
     for (Context subContext : rewrittenStatementContexts) {
       subContext.clear();
     }
     // Then clear this context
-    if (resDir != null) {
-      try {
-        FileSystem fs = resDir.getFileSystem(conf);
-        LOG.debug("Deleting result dir: {}",  resDir);
-        fs.delete(resDir, true);
-      } catch (IOException e) {
-        LOG.info("Context clear error: " + StringUtils.stringifyException(e));
+      if (resDir != null) {
+        try {
+          FileSystem fs = resDir.getFileSystem(conf);
+          LOG.debug("Deleting result dir: {}", resDir);
+          fs.delete(resDir, true);
+        } catch (IOException e) {
+          LOG.info("Context clear error: " + StringUtils.stringifyException(e));
+        }
       }
-    }
 
     if (resFile != null) {
       try {
@@ -722,6 +840,9 @@ public class Context {
       } catch (IOException e) {
         LOG.info("Context clear error: " + StringUtils.stringifyException(e));
       }
+    }
+    if(deleteResultDir) {
+      removeResultCacheDir();
     }
     removeMaterializedCTEs();
     removeScratchDir();
@@ -938,14 +1059,6 @@ public class Context {
     this.needLockMgr = needLockMgr;
   }
 
-  public int getTryCount() {
-    return tryCount;
-  }
-
-  public void setTryCount(int tryCount) {
-    this.tryCount = tryCount;
-  }
-
   public String getCboInfo() {
     return cboInfo;
   }
@@ -954,12 +1067,28 @@ public class Context {
     this.cboInfo = cboInfo;
   }
 
+  public String getOptimizedSql() {
+    return this.optimizedSql;
+  }
+
+  public void setOptimizedSql(String newSql) {
+    this.optimizedSql = newSql;
+  }
+
   public boolean isCboSucceeded() {
     return cboSucceeded;
   }
 
   public void setCboSucceeded(boolean cboSucceeded) {
     this.cboSucceeded = cboSucceeded;
+  }
+
+  public String getCalcitePlan() {
+    return this.calcitePlan;
+  }
+
+  public void setCalcitePlan(String calcitePlan) {
+    this.calcitePlan = calcitePlan;
   }
 
   public Table getMaterializedTable(String cteName) {
@@ -976,6 +1105,10 @@ public class Context {
 
   public CompilationOpContext getOpContext() {
     return opContext;
+  }
+
+  public void setOpContext(CompilationOpContext opContext) {
+    this.opContext = opContext;
   }
 
   public Heartbeater getHeartbeater() {
@@ -1003,7 +1136,7 @@ public class Context {
   public ExplainConfiguration getExplainConfig() {
     return explainConfig;
   }
-  private boolean isExplainPlan = false;
+
   public boolean isExplainPlan() {
     return isExplainPlan;
   }
@@ -1027,7 +1160,58 @@ public class Context {
   public void setIsUpdateDeleteMerge(boolean isUpdate) {
     this.isUpdateDeleteMerge = isUpdate;
   }
+
+  public boolean isLoadingMaterializedView() {
+    return isLoadingMaterializedView;
+  }
+
+  public void setIsLoadingMaterializedView(boolean isLoadingMaterializedView) {
+    this.isLoadingMaterializedView = isLoadingMaterializedView;
+  }
+
   public String getExecutionId() {
     return executionId;
   }
+
+  public void setPlanMapper(PlanMapper planMapper) {
+    this.planMapper = planMapper;
+  }
+
+  public PlanMapper getPlanMapper() {
+    return planMapper;
+  }
+
+  public void setStatsSource(StatsSource statsSource) {
+    this.statsSource = statsSource;
+  }
+
+  public StatsSource getStatsSource() {
+    if (statsSource != null) {
+      return statsSource;
+    } else {
+      // hierarchical; add def stats also here
+      return EmptyStatsSource.INSTANCE;
+    }
+  }
+
+  public int getExecutionIndex() {
+    return executionIndex;
+  }
+
+  public void setExecutionIndex(int executionIndex) {
+    this.executionIndex = executionIndex;
+  }
+
+  public void setConf(HiveConf conf) {
+    this.conf = conf;
+  }
+
+  public Table getTempTableForLoad() {
+    return tempTableForLoad;
+  }
+
+  public void setTempTableForLoad(Table tempTableForLoad) {
+    this.tempTableForLoad = tempTableForLoad;
+  }
+
 }

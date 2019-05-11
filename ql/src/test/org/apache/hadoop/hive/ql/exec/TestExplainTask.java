@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -218,8 +218,8 @@ public class TestExplainTask {
 
 
     JsonNode result = objectMapper.readTree(uut.getJSONPlan(null, tasks, null, true,
-            false, false).toString());
-    JsonNode expected = objectMapper.readTree("{\"STAGE DEPENDENCIES\":{\"mockTaskId\":" +
+            false, false, "Plan Optimized by CBO", null, null).toString());
+    JsonNode expected = objectMapper.readTree("{\"cboInfo\":\"Plan Optimized by CBO\", \"STAGE DEPENDENCIES\":{\"mockTaskId\":" +
             "{\"ROOT STAGE\":\"TRUE\",\"BACKUP STAGE\":\"backup-id-mock\"}},\"STAGE PLANS\":" +
             "{\"mockTaskId\":{}}}");
 

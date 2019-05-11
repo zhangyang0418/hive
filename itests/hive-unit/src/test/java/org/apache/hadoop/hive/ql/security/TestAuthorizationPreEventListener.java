@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -38,6 +38,7 @@ import org.apache.hadoop.hive.ql.IDriver;
 import org.apache.hadoop.hive.ql.security.DummyHiveMetastoreAuthorizationProvider.AuthCallContext;
 import org.apache.hadoop.hive.ql.security.authorization.AuthorizationPreEventListener;
 import org.apache.hadoop.hive.ql.session.SessionState;
+import org.junit.Assert;
 
 /**
  * TestAuthorizationPreEventListener. Test case for
@@ -189,6 +190,8 @@ public class TestAuthorizationPreEventListener extends TestCase {
             DummyHiveMetastoreAuthorizationProvider.AuthCallContextType.TABLE))
             .getTTable();
     Table tbl = msc.getTable(dbName, tblName);
+    Assert.assertTrue(tbl.isSetId());
+    tbl.unsetId();
     validateCreateTable(tbl, tblFromEvent);
 
     driver.run("alter table tmptbl add partition (b='2011')");

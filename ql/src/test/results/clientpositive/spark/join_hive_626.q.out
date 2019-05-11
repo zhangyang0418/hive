@@ -60,10 +60,18 @@ PREHOOK: query: explain
 select hive_foo.foo_name, hive_bar.bar_name, n from hive_foo join hive_bar on hive_foo.foo_id =
 hive_bar.foo_id join hive_count on hive_count.bar_id = hive_bar.bar_id
 PREHOOK: type: QUERY
+PREHOOK: Input: default@hive_bar
+PREHOOK: Input: default@hive_count
+PREHOOK: Input: default@hive_foo
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 select hive_foo.foo_name, hive_bar.bar_name, n from hive_foo join hive_bar on hive_foo.foo_id =
 hive_bar.foo_id join hive_count on hive_count.bar_id = hive_bar.bar_id
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@hive_bar
+POSTHOOK: Input: default@hive_count
+POSTHOOK: Input: default@hive_foo
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-0 depends on stages: Stage-1
@@ -80,6 +88,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: hive_bar
+                  filterExpr: (foo_id is not null and bar_id is not null) (type: boolean)
                   Statistics: Num rows: 1 Data size: 230 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: (bar_id is not null and foo_id is not null) (type: boolean)
@@ -94,10 +103,12 @@ STAGE PLANS:
                         Map-reduce partition columns: _col1 (type: int)
                         Statistics: Num rows: 1 Data size: 230 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col0 (type: int), _col2 (type: string)
+            Execution mode: vectorized
         Map 4 
             Map Operator Tree:
                 TableScan
                   alias: hive_foo
+                  filterExpr: foo_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: foo_id is not null (type: boolean)
@@ -112,10 +123,12 @@ STAGE PLANS:
                         Map-reduce partition columns: _col0 (type: int)
                         Statistics: Num rows: 1 Data size: 150 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: string)
+            Execution mode: vectorized
         Map 5 
             Map Operator Tree:
                 TableScan
                   alias: hive_count
+                  filterExpr: bar_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 50 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: bar_id is not null (type: boolean)
@@ -130,6 +143,7 @@ STAGE PLANS:
                         Map-reduce partition columns: _col0 (type: int)
                         Statistics: Num rows: 1 Data size: 50 Basic stats: COMPLETE Column stats: NONE
                         value expressions: _col1 (type: int)
+            Execution mode: vectorized
         Reducer 2 
             Reduce Operator Tree:
               Join Operator

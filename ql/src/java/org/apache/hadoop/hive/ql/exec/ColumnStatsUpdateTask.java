@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,11 +21,14 @@ package org.apache.hadoop.hive.ql.exec;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.BitSet;
+import java.util.Collections;
 import java.util.Map;
 import java.util.Map.Entry;
 
+import org.apache.hadoop.hive.common.TableName;
+import org.apache.hadoop.hive.common.ValidReaderWriteIdList;
+import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.metastore.api.BinaryColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatistics;
@@ -33,9 +36,9 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsDesc;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.Date;
-import org.apache.hadoop.hive.metastore.api.Decimal;
 import org.apache.hadoop.hive.metastore.api.MetaException;
 import org.apache.hadoop.hive.metastore.api.SetPartitionsStatsRequest;
+import org.apache.hadoop.hive.metastore.api.utils.DecimalUtils;
 import org.apache.hadoop.hive.metastore.columnstats.cache.DateColumnStatsDataInspector;
 import org.apache.hadoop.hive.metastore.columnstats.cache.DecimalColumnStatsDataInspector;
 import org.apache.hadoop.hive.metastore.columnstats.cache.DoubleColumnStatsDataInspector;
@@ -45,12 +48,15 @@ import org.apache.hadoop.hive.ql.CompilationOpContext;
 import org.apache.hadoop.hive.ql.DriverContext;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.QueryState;
+import org.apache.hadoop.hive.ql.exec.repl.util.ReplUtils;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
+import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.parse.SemanticException;
 import org.apache.hadoop.hive.ql.plan.ColumnStatsUpdateWork;
 import org.apache.hadoop.hive.ql.plan.api.StageType;
-import org.apache.hadoop.hive.serde2.io.DateWritable;
+import org.apache.hadoop.hive.serde2.io.DateWritableV2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -76,6 +82,14 @@ public class ColumnStatsUpdateTask extends Task<ColumnStatsUpdateWork> {
   private ColumnStatistics constructColumnStatsFromInput()
       throws SemanticException, MetaException {
 
+    // If we are replicating the stats, we don't need to construct those again.
+    if (work.getColStats() != null) {
+      ColumnStatistics colStats = work.getColStats();
+      LOG.debug("Got stats through replication for " +
+              colStats.getStatsDesc().getDbName() + "." +
+              colStats.getStatsDesc().getTableName());
+      return colStats;
+    }
     String dbName = work.dbName();
     String tableName = work.getTableName();
     String partName = work.getPartName();
@@ -226,11 +240,11 @@ public class ColumnStatsUpdateTask extends Task<ColumnStatsUpdateWork> {
           decimalStats.setNumDVs(Long.parseLong(value));
         } else if (fName.equals("lowValue")) {
           BigDecimal d = new BigDecimal(value);
-          decimalStats.setLowValue(new Decimal(ByteBuffer.wrap(d
+          decimalStats.setLowValue(DecimalUtils.getDecimal(ByteBuffer.wrap(d
               .unscaledValue().toByteArray()), (short) d.scale()));
         } else if (fName.equals("highValue")) {
           BigDecimal d = new BigDecimal(value);
-          decimalStats.setHighValue(new Decimal(ByteBuffer.wrap(d
+          decimalStats.setHighValue(DecimalUtils.getDecimal(ByteBuffer.wrap(d
               .unscaledValue().toByteArray()), (short) d.scale()));
         } else {
           throw new SemanticException("Unknown stat");
@@ -286,9 +300,42 @@ public class ColumnStatsUpdateTask extends Task<ColumnStatsUpdateWork> {
   }
 
   private int persistColumnStats(Hive db) throws HiveException, MetaException, IOException {
-    List<ColumnStatistics> colStats = new ArrayList<>();
-    colStats.add(constructColumnStatsFromInput());
-    SetPartitionsStatsRequest request = new SetPartitionsStatsRequest(colStats);
+    ColumnStatistics colStats = constructColumnStatsFromInput();
+    SetPartitionsStatsRequest request =
+            new SetPartitionsStatsRequest(Collections.singletonList(colStats));
+
+    // Set writeId and validWriteId list for replicated statistics. getColStats() will return
+    // non-null value only during replication.
+    if (work.getColStats() != null) {
+      String dbName = colStats.getStatsDesc().getDbName();
+      String tblName = colStats.getStatsDesc().getTableName();
+      Table tbl = db.getTable(dbName, tblName);
+      long writeId = work.getWriteId();
+      // If it's a transactional table on source and target, we will get a valid writeId
+      // associated with it. Otherwise it's a non-transactional table on source migrated to a
+      // transactional table on target, we need to craft a valid writeId here.
+      if (AcidUtils.isTransactionalTable(tbl)) {
+        ValidWriteIdList writeIds;
+        if (work.getIsMigratingToTxn()) {
+          Long tmpWriteId = ReplUtils.getMigrationCurrentTblWriteId(conf);
+          if (tmpWriteId == null) {
+            throw new HiveException("DDLTask : Write id is not set in the config by open txn task for migration");
+          }
+          writeId = tmpWriteId;
+        }
+
+        // We need a valid writeId list to update column statistics for a transactional table. We
+        // do not have a valid writeId list which was used to update the column stats on the
+        // source. But we know for sure that the writeId associated with the stats was valid then
+        // (otherwise column stats update would have failed on the source). So use a valid
+        // transaction list with only that writeId and use it to update the stats.
+        writeIds = new ValidReaderWriteIdList(TableName.getDbTable(dbName, tblName), new long[0],
+                                              new BitSet(), writeId);
+        request.setValidWriteIdList(writeIds.toString());
+        request.setWriteId(writeId);
+      }
+    }
+
     db.setPartitionColumnStatistics(request);
     return 0;
   }
@@ -299,6 +346,7 @@ public class ColumnStatsUpdateTask extends Task<ColumnStatsUpdateWork> {
       Hive db = getHive();
       return persistColumnStats(db);
     } catch (Exception e) {
+      setException(e);
       LOG.info("Failed to persist stats in metastore", e);
     }
     return 1;
@@ -317,7 +365,7 @@ public class ColumnStatsUpdateTask extends Task<ColumnStatsUpdateWork> {
   private Date readDateValue(String dateStr) {
     // try either yyyy-mm-dd, or integer representing days since epoch
     try {
-      DateWritable writableVal = new DateWritable(java.sql.Date.valueOf(dateStr));
+      DateWritableV2 writableVal = new DateWritableV2(org.apache.hadoop.hive.common.type.Date.valueOf(dateStr));
       return new Date(writableVal.getDays());
     } catch (IllegalArgumentException err) {
       // Fallback to integer parsing

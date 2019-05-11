@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -24,13 +24,16 @@ import java.io.OutputStream;
 import java.io.Serializable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
+import java.security.AccessController;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.hive.ql.exec.AddToClassPathAction;
 import org.apache.hadoop.hive.ql.exec.SerializationUtilities;
 import org.apache.hadoop.hive.ql.log.LogDivertAppenderForTest;
 import org.apache.hadoop.mapreduce.MRJobConfig;
@@ -256,6 +259,7 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
     //See the javadoc on HiveOutputFormatImpl and HadoopShims.prepareJobOutput()
     job.setOutputFormat(HiveOutputFormatImpl.class);
 
+    job.setMapRunnerClass(ExecMapRunner.class);
     job.setMapperClass(ExecMapper.class);
 
     job.setMapOutputKeyClass(HiveKey.class);
@@ -456,9 +460,9 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
           jc.close();
         }
       } catch (Exception e) {
-	LOG.warn("Failed while cleaning up ", e);
+        LOG.warn("Failed while cleaning up ", e);
       } finally {
-	HadoopJobExecHelper.runningJobs.remove(rj);
+        HadoopJobExecHelper.runningJobs.remove(rj);
       }
     }
 
@@ -573,11 +577,6 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
     if (mWork.getInputformat() != null) {
       HiveConf.setVar(conf, ConfVars.HIVEINPUTFORMAT, mWork.getInputformat());
     }
-    if (mWork.getIndexIntermediateFile() != null) {
-      conf.set(ConfVars.HIVE_INDEX_COMPACT_FILE.varname, mWork.getIndexIntermediateFile());
-      conf.set(ConfVars.HIVE_INDEX_BLOCKFILTER_FILE.varname, mWork.getIndexIntermediateFile());
-    }
-
     // Intentionally overwrites anything the user may have put here
     conf.setBoolean("hive.input.format.sorted", mWork.isInputFormatSorted());
 
@@ -748,7 +747,9 @@ public class ExecDriver extends Task<MapredWork> implements Serializable, Hadoop
       // see also - code in CliDriver.java
       ClassLoader loader = conf.getClassLoader();
       if (StringUtils.isNotBlank(libjars)) {
-        loader = Utilities.addToClassPath(loader, StringUtils.split(libjars, ","));
+        AddToClassPathAction addAction = new AddToClassPathAction(
+            loader, Arrays.asList(StringUtils.split(libjars, ",")));
+        loader = AccessController.doPrivileged(addAction);
       }
       conf.setClassLoader(loader);
       // Also set this to the Thread ContextClassLoader, so new threads will

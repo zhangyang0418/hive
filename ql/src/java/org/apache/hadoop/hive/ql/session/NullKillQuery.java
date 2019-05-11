@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,11 +18,12 @@
 
 package org.apache.hadoop.hive.ql.session;
 
+import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 
 public class NullKillQuery implements KillQuery {
   @Override
-  public void killQuery(String queryId, String errMsg) throws HiveException {
+  public void killQuery(String queryId, String errMsg, HiveConf conf) throws HiveException {
     // Do nothing
   }
 }

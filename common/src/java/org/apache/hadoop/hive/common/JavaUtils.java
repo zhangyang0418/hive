@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,18 +18,12 @@
 
 package org.apache.hadoop.hive.common;
 
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.IOException;
-import java.io.PrintStream;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.net.URLClassLoader;
 import java.util.Arrays;
 import java.util.List;
 
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.fs.PathFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,29 +32,7 @@ import org.slf4j.LoggerFactory;
  * Hive.
  */
 public final class JavaUtils {
-
-  public static final String BASE_PREFIX =  "base";
-  public static final String DELTA_PREFIX = "delta";
-  public static final String DELTA_DIGITS = "%07d";
-  public static final int DELTA_DIGITS_LEN = 7;
-  public static final String STATEMENT_DIGITS = "%04d";
   private static final Logger LOG = LoggerFactory.getLogger(JavaUtils.class);
-  private static final Method SUN_MISC_UTIL_RELEASE;
-
-  static {
-    if (Closeable.class.isAssignableFrom(URLClassLoader.class)) {
-      SUN_MISC_UTIL_RELEASE = null;
-    } else {
-      Method release = null;
-      try {
-        Class<?> clazz = Class.forName("sun.misc.ClassLoaderUtil");
-        release = clazz.getMethod("releaseLoader", URLClassLoader.class);
-      } catch (Exception e) {
-        // ignore
-      }
-      SUN_MISC_UTIL_RELEASE = release;
-    }
-  }
 
   /**
    * Standard way of getting classloader in Hive code (outside of Hadoop).
@@ -76,6 +48,10 @@ public final class JavaUtils {
       classLoader = JavaUtils.class.getClassLoader();
     }
     return classLoader;
+  }
+
+  public static Class loadClass(String shadePrefix, String className) throws ClassNotFoundException {
+    return loadClass(shadePrefix + "." + className);
   }
 
   public static Class loadClass(String className) throws ClassNotFoundException {
@@ -94,8 +70,10 @@ public final class JavaUtils {
       try {
         closeClassLoader(current);
       } catch (IOException e) {
-        LOG.info("Failed to close class loader " + current +
-            Arrays.toString(((URLClassLoader) current).getURLs()), e);
+        String detailedMessage = current instanceof URLClassLoader ?
+            Arrays.toString(((URLClassLoader) current).getURLs()) :
+            "";
+        LOG.info("Failed to close class loader " + current + " " + detailedMessage, e);
       }
     }
     return true;
@@ -111,35 +89,12 @@ public final class JavaUtils {
     return current == stop;
   }
 
-  // best effort to close
-  // see https://issues.apache.org/jira/browse/HIVE-3969 for detail
   public static void closeClassLoader(ClassLoader loader) throws IOException {
     if (loader instanceof Closeable) {
-      ((Closeable)loader).close();
-    } else if (SUN_MISC_UTIL_RELEASE != null && loader instanceof URLClassLoader) {
-      PrintStream outputStream = System.out;
-      ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-      PrintStream newOutputStream = new PrintStream(byteArrayOutputStream);
-      try {
-        // SUN_MISC_UTIL_RELEASE.invoke prints to System.out
-        // So we're changing the outputstream for that call,
-        // and setting it back to original System.out when we're done
-        System.setOut(newOutputStream);
-        SUN_MISC_UTIL_RELEASE.invoke(null, loader);
-        String output = byteArrayOutputStream.toString("UTF8");
-        LOG.debug(output);
-      } catch (InvocationTargetException e) {
-        if (e.getTargetException() instanceof IOException) {
-          throw (IOException)e.getTargetException();
-        }
-        throw new IOException(e.getTargetException());
-      } catch (Exception e) {
-        throw new IOException(e);
-      }
-      finally {
-        System.setOut(outputStream);
-        newOutputStream.close();
-      }
+      ((Closeable) loader).close();
+    } else {
+      LOG.warn("Ignoring attempt to close class loader ({}) -- not instance of UDFClassLoader.",
+          loader == null ? "mull" : loader.getClass().getSimpleName());
     }
   }
 
@@ -150,12 +105,13 @@ public final class JavaUtils {
   public static String lockIdToString(long extLockId) {
     return "lockid:" + extLockId;
   }
-  /**
-   * Utility method for ACID to normalize logging info.  Matches
-   * org.apache.hadoop.hive.metastore.api.LockResponse#toString
-   */
+
   public static String txnIdToString(long txnId) {
     return "txnid:" + txnId;
+  }
+
+  public static String writeIdToString(long writeId) {
+    return "writeid:" + writeId;
   }
 
   public static String txnIdsToString(List<Long> txnIds) {
@@ -164,84 +120,5 @@ public final class JavaUtils {
 
   private JavaUtils() {
     // prevent instantiation
-  }
-
-  public static Long extractTxnId(Path file) {
-    String fileName = file.getName();
-    String[] parts = fileName.split("_", 4);  // e.g. delta_0000001_0000001_0000 or base_0000022
-    if (parts.length < 2 || !(DELTA_PREFIX.equals(parts[0]) || BASE_PREFIX.equals(parts[0]))) {
-      LOG.debug("Cannot extract transaction ID for a MM table: " + file
-          + " (" + Arrays.toString(parts) + ")");
-      return null;
-    }
-    long writeId = -1;
-    try {
-      writeId = Long.parseLong(parts[1]);
-    } catch (NumberFormatException ex) {
-      LOG.debug("Cannot extract transaction ID for a MM table: " + file
-          + "; parsing " + parts[1] + " got " + ex.getMessage());
-      return null;
-    }
-    return writeId;
-  }
-
-  public static class IdPathFilter implements PathFilter {
-    private String mmDirName;
-    private final boolean isMatch, isIgnoreTemp, isPrefix;
-
-    public IdPathFilter(long writeId, int stmtId, boolean isMatch) {
-      this(writeId, stmtId, isMatch, false, false);
-    }
-    public IdPathFilter(long writeId, int stmtId, boolean isMatch, boolean isIgnoreTemp) {
-      this(writeId, stmtId, isMatch, isIgnoreTemp, false);
-    }
-    public IdPathFilter(long writeId, int stmtId, boolean isMatch, boolean isIgnoreTemp, boolean isBaseDir) {
-      String mmDirName = null;
-      if (!isBaseDir) {
-        mmDirName = DELTA_PREFIX + "_" + String.format(DELTA_DIGITS, writeId) + "_" +
-                String.format(DELTA_DIGITS, writeId) + "_";
-        if (stmtId >= 0) {
-          mmDirName += String.format(STATEMENT_DIGITS, stmtId);
-          isPrefix = false;
-        } else {
-          isPrefix = true;
-        }
-      } else {
-        mmDirName = BASE_PREFIX + "_" + String.format(DELTA_DIGITS, writeId);
-        isPrefix = false;
-      }
-
-      this.mmDirName = mmDirName;
-      this.isMatch = isMatch;
-      this.isIgnoreTemp = isIgnoreTemp;
-    }
-
-    @Override
-    public boolean accept(Path path) {
-      String name = path.getName();
-      if ((isPrefix && name.startsWith(mmDirName)) || (!isPrefix && name.equals(mmDirName))) {
-        return isMatch;
-      }
-      if (isIgnoreTemp && name.length() > 0) {
-        char c = name.charAt(0);
-        if (c == '.' || c == '_') return false; // Regardless of isMatch, ignore this.
-      }
-      return !isMatch;
-    }
-  }
-
-  public static class AnyIdDirFilter implements PathFilter {
-    @Override
-    public boolean accept(Path path) {
-      String name = path.getName();
-      if (!name.startsWith(DELTA_PREFIX + "_")) return false;
-      String idStr = name.substring(DELTA_PREFIX.length() + 1, DELTA_PREFIX.length() + 1 + DELTA_DIGITS_LEN);
-      try {
-        Long.parseLong(idStr);
-      } catch (NumberFormatException ex) {
-        return false;
-      }
-      return true;
-    }
   }
 }

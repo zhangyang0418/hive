@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -27,13 +27,19 @@ import java.util.Set;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.PrincipalType;
+import org.apache.hadoop.hive.metastore.api.WMFullResourcePlan;
 import org.apache.hadoop.hive.metastore.api.WMResourcePlan;
+import org.apache.hadoop.hive.metastore.api.WMValidateResourcePlanResponse;
+import org.apache.hadoop.hive.ql.metadata.CheckConstraint;
+import org.apache.hadoop.hive.ql.metadata.DefaultConstraint;
 import org.apache.hadoop.hive.ql.metadata.ForeignKeyInfo;
 import org.apache.hadoop.hive.ql.metadata.Hive;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.NotNullConstraint;
 import org.apache.hadoop.hive.ql.metadata.Partition;
 import org.apache.hadoop.hive.ql.metadata.PrimaryKeyInfo;
+import org.apache.hadoop.hive.ql.metadata.StorageHandlerInfo;
 import org.apache.hadoop.hive.ql.metadata.Table;
 import org.apache.hadoop.hive.ql.metadata.UniqueConstraint;
 
@@ -64,6 +70,18 @@ public interface MetaDataFormatter {
       throws HiveException;
 
   /**
+   * Show a list of tables including table types.
+   */
+  public void showTablesExtended(DataOutputStream out, List<Table> tables)
+      throws HiveException;
+
+  /**
+   * Show a list of materialized views.
+   */
+  public void showMaterializedViews(DataOutputStream out, List<Table> materializedViews)
+      throws HiveException;
+
+  /**
    * Describe table.
    * @param out
    * @param colPath
@@ -73,7 +91,6 @@ public interface MetaDataFormatter {
    * @param cols
    * @param isFormatted - describe with formatted keyword
    * @param isExt
-   * @param isPretty
    * @param isOutputPadded - if true, add spacing and indentation
    * @param colStats
    * @param fkInfo  foreign keys information
@@ -87,7 +104,8 @@ public interface MetaDataFormatter {
       boolean isFormatted, boolean isExt,
       boolean isOutputPadded, List<ColumnStatisticsObj> colStats,
       PrimaryKeyInfo pkInfo, ForeignKeyInfo fkInfo,
-      UniqueConstraint ukInfo, NotNullConstraint nnInfo)
+      UniqueConstraint ukInfo, NotNullConstraint nnInfo, DefaultConstraint dInfo, CheckConstraint cInfo,
+      StorageHandlerInfo storageHandlerInfo)
           throws HiveException;
 
   /**
@@ -117,14 +135,17 @@ public interface MetaDataFormatter {
   /**
    * Describe a database.
    */
-  public void showDatabaseDescription (DataOutputStream out, String database, String comment,
-      String location, String ownerName, String ownerType, Map<String, String> params)
-          throws HiveException;
-
-  public void showResourcePlans(DataOutputStream out, List<WMResourcePlan> resourcePlans)
+  void showDatabaseDescription(DataOutputStream out, String database, String comment, String location,
+      String ownerName, PrincipalType ownerType, Map<String, String> params)
       throws HiveException;
 
-  public void showErrors(DataOutputStream out, List<String> errors)
+  void showResourcePlans(DataOutputStream out, List<WMResourcePlan> resourcePlans)
+      throws HiveException;
+
+  void showFullResourcePlan(DataOutputStream out, WMFullResourcePlan resourcePlan)
+      throws HiveException;
+
+  void showErrors(DataOutputStream out, WMValidateResourcePlanResponse errors)
       throws HiveException;
 }
 

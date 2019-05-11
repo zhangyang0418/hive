@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -98,8 +98,7 @@ public class HiveRelMdSelectivity extends RelMdSelectivity {
     } catch (CalciteSemanticException e) {
       throw new RuntimeException(e);
     }
-    ImmutableMap.Builder<Integer, Double> colStatMapBuilder = ImmutableMap
-        .builder();
+    ImmutableMap.Builder<Integer, Double> colStatMapBuilder = ImmutableMap.builder();
     ImmutableMap<Integer, Double> colStatMap;
     int rightOffSet = j.getLeft().getRowType().getFieldCount();
 

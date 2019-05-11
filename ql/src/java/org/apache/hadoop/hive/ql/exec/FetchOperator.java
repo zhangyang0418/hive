@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,13 +37,14 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
-import org.apache.hadoop.hive.common.ValidReadTxnList;
-import org.apache.hadoop.hive.common.ValidTxnList;
+import org.apache.hadoop.hive.common.ValidReaderWriteIdList;
+import org.apache.hadoop.hive.common.ValidWriteIdList;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.exec.mr.ExecMapperContext;
 import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.HiveContextAwareRecordReader;
 import org.apache.hadoop.hive.ql.io.HiveInputFormat;
+import org.apache.hadoop.hive.ql.io.HiveSequenceFileInputFormat;
 import org.apache.hadoop.hive.ql.io.HiveRecordReader;
 import org.apache.hadoop.hive.ql.metadata.HiveException;
 import org.apache.hadoop.hive.ql.metadata.VirtualColumn;
@@ -151,8 +152,9 @@ public class FetchOperator implements Serializable {
     initialize();
   }
 
-  public void setValidTxnList(String txnStr) {
-    job.set(ValidTxnList.VALID_TXNS_KEY, txnStr);
+  public void setValidWriteIdList(String writeIdStr) {
+    job.set(ValidWriteIdList.VALID_WRITEIDS_KEY, writeIdStr);
+    LOG.debug("FetchOperator set writeIdStr: " + writeIdStr);
   }
   private void initialize() throws HiveException {
     if (isStatReader) {
@@ -213,8 +215,8 @@ public class FetchOperator implements Serializable {
   private static final Map<String, InputFormat> inputFormats = new HashMap<String, InputFormat>();
 
   @SuppressWarnings("unchecked")
-  static InputFormat getInputFormatFromCache(
-    Class<? extends InputFormat> inputFormatClass, JobConf conf) throws IOException {
+  public static InputFormat getInputFormatFromCache(
+      Class<? extends InputFormat> inputFormatClass, Configuration conf) throws IOException {
     if (Configurable.class.isAssignableFrom(inputFormatClass) ||
         JobConfigurable.class.isAssignableFrom(inputFormatClass)) {
       return ReflectionUtil.newInstance(inputFormatClass, conf);
@@ -227,7 +229,7 @@ public class FetchOperator implements Serializable {
         inputFormats.put(inputFormatClass.getName(), format);
       } catch (Exception e) {
         throw new IOException("Cannot create an instance of InputFormat class "
-            + inputFormatClass.getName() + " as specified in mapredWork!", e);
+                                  + inputFormatClass.getName() + " as specified in mapredWork!", e);
       }
     }
     return format;
@@ -272,9 +274,16 @@ public class FetchOperator implements Serializable {
       if (isNonNativeTable) {
         return true;
       }
+      // if fetch is not being done from table and file sink has provided a list
+      // of files to fetch from then there is no need to query FS to check the existence
+      // of currpath
+      if(!this.getWork().isSourceTable() && this.getWork().getFilesToFetch() != null
+          && !this.getWork().getFilesToFetch().isEmpty()) {
+        return true;
+      }
       FileSystem fs = currPath.getFileSystem(job);
       if (fs.exists(currPath)) {
-        if (extractValidTxnList() != null &&
+        if (extractValidWriteIdList() != null &&
             AcidUtils.isInsertOnlyTable(currDesc.getTableDesc().getProperties())) {
           return true;
         }
@@ -378,76 +387,119 @@ public class FetchOperator implements Serializable {
       Class<? extends InputFormat> formatter = currDesc.getInputFileFormatClass();
       Utilities.copyTableJobPropertiesToConf(currDesc.getTableDesc(), job);
       InputFormat inputFormat = getInputFormatFromCache(formatter, job);
-      String inputs = processCurrPathForMmWriteIds(inputFormat);
-      if (Utilities.FILE_OP_LOGGER.isTraceEnabled()) {
-        Utilities.FILE_OP_LOGGER.trace("Setting fetch inputs to " + inputs);
+      if(inputFormat instanceof HiveSequenceFileInputFormat) {
+        // input format could be cached, in which case we need to reset the list of files to fetch
+        ((HiveSequenceFileInputFormat) inputFormat).setFiles(null);
       }
-      if (inputs == null) return null;
-      job.set("mapred.input.dir", inputs);
 
-      InputSplit[] splits = inputFormat.getSplits(job, 1);
-      FetchInputFormatSplit[] inputSplits = new FetchInputFormatSplit[splits.length];
-      for (int i = 0; i < splits.length; i++) {
-        inputSplits[i] = new FetchInputFormatSplit(splits[i], inputFormat);
+      List<Path> dirs = new ArrayList<>(), dirsWithOriginals = new ArrayList<>();
+      processCurrPathForMmWriteIds(inputFormat, dirs, dirsWithOriginals);
+      if (dirs.isEmpty() && dirsWithOriginals.isEmpty()) {
+        LOG.debug("No valid directories for " + currPath);
+        continue;
       }
+
+      List<FetchInputFormatSplit> inputSplits = new ArrayList<>();
+      if(inputFormat instanceof HiveSequenceFileInputFormat && this.getWork().getFilesToFetch() != null
+          && !this.getWork().getFilesToFetch().isEmpty() && !this.getWork().isSourceTable()) {
+        HiveSequenceFileInputFormat fileFormat = (HiveSequenceFileInputFormat)inputFormat;
+        fileFormat.setFiles(this.getWork().getFilesToFetch());
+        InputSplit[] splits = inputFormat.getSplits(job, 1);
+        for (int i = 0; i < splits.length; i++) {
+          inputSplits.add(new FetchInputFormatSplit(splits[i], inputFormat));
+        }
+      } else {
+        if (!dirs.isEmpty()) {
+          String inputs = makeInputString(dirs);
+          Utilities.FILE_OP_LOGGER.trace("Setting fetch inputs to {}", inputs);
+          job.set("mapred.input.dir", inputs);
+
+          generateWrappedSplits(inputFormat, inputSplits, job);
+        }
+      }
+
+      if (!dirsWithOriginals.isEmpty()) {
+        String inputs = makeInputString(dirsWithOriginals);
+        Utilities.FILE_OP_LOGGER.trace("Setting originals fetch inputs to {}", inputs);
+        JobConf jobNoRec = HiveInputFormat.createConfForMmOriginalsSplit(job, dirsWithOriginals);
+        jobNoRec.set("mapred.input.dir", inputs);
+        generateWrappedSplits(inputFormat, inputSplits, jobNoRec);
+      }
+
       if (work.getSplitSample() != null) {
         inputSplits = splitSampling(work.getSplitSample(), inputSplits);
       }
-      if (inputSplits.length > 0) {
-        if (HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_IN_TEST)) {
-          Arrays.sort(inputSplits, new FetchInputFormatSplitComparator());
-        }
-        return inputSplits;
+
+      if (inputSplits.isEmpty()) {
+        LOG.debug("No splits for " + currPath);
+        continue;
       }
+      if (HiveConf.getBoolVar(job, HiveConf.ConfVars.HIVE_IN_TEST)) {
+        Collections.sort(inputSplits, new FetchInputFormatSplitComparator());
+      }
+      return inputSplits.toArray(new FetchInputFormatSplit[inputSplits.size()]);
     }
+
     return null;
   }
 
-  private String processCurrPathForMmWriteIds(InputFormat inputFormat) throws IOException {
+  private void generateWrappedSplits(InputFormat inputFormat,
+      List<FetchInputFormatSplit> inputSplits, JobConf job) throws IOException {
+    InputSplit[] splits = inputFormat.getSplits(job, 1);
+    for (int i = 0; i < splits.length; i++) {
+      inputSplits.add(new FetchInputFormatSplit(splits[i], inputFormat));
+    }
+  }
+
+  private void processCurrPathForMmWriteIds(InputFormat inputFormat,
+      List<Path> dirs, List<Path> dirsWithOriginals) throws IOException {
     if (inputFormat instanceof HiveInputFormat) {
-      return StringUtils.escapeString(currPath.toString()); // No need to process here.
+      dirs.add(currPath); // No need to process here.
     }
-    ValidTxnList validTxnList;
+    ValidWriteIdList validWriteIdList;
     if (AcidUtils.isInsertOnlyTable(currDesc.getTableDesc().getProperties())) {
-      validTxnList = extractValidTxnList();
+      validWriteIdList = extractValidWriteIdList();
     } else {
-      validTxnList = null;  // non-MM case
+      validWriteIdList = null;  // non-MM case
     }
-    if (validTxnList != null) {
+    if (validWriteIdList != null) {
       Utilities.FILE_OP_LOGGER.info("Processing " + currDesc.getTableName() + " for MM paths");
     }
 
-    Path[] dirs = HiveInputFormat.processPathsForMmRead(Lists.newArrayList(currPath), job, validTxnList);
-    if (dirs == null || dirs.length == 0) {
-      return null; // No valid inputs. This condition is logged inside the call.
-    }
-    StringBuffer str = new StringBuffer(StringUtils.escapeString(dirs[0].toString()));
-    for(int i = 1; i < dirs.length;i++) {
-      str.append(",").append(StringUtils.escapeString(dirs[i].toString()));
-    }
-    return str.toString();
+    HiveInputFormat.processPathsForMmRead(
+        Lists.newArrayList(currPath), job, validWriteIdList, dirs, dirsWithOriginals);
   }
 
-  private ValidTxnList extractValidTxnList() {
+  private String makeInputString(List<Path> dirs) {
+    if (dirs == null || dirs.isEmpty()) return "";
+    StringBuffer str = new StringBuffer(StringUtils.escapeString(dirs.get(0).toString()));
+    for(int i = 1; i < dirs.size(); i++) {
+      str.append(",").append(StringUtils.escapeString(dirs.get(i).toString()));
+    }
+    return str.toString();
+
+  }
+  private ValidWriteIdList extractValidWriteIdList() {
     if (currDesc.getTableName() == null || !org.apache.commons.lang.StringUtils.isBlank(currDesc.getTableName())) {
-      String txnString = job.get(ValidTxnList.VALID_TXNS_KEY);
-      return txnString == null ? new ValidReadTxnList() : new ValidReadTxnList(txnString);
+      String txnString = job.get(ValidWriteIdList.VALID_WRITEIDS_KEY);
+      LOG.debug("FetchOperator get writeIdStr: " + txnString);
+      return txnString == null ? new ValidReaderWriteIdList() : new ValidReaderWriteIdList(txnString);
     }
     return null;  // not fetching from a table directly but from a temp location
   }
 
-  private FetchInputFormatSplit[] splitSampling(SplitSample splitSample,
-      FetchInputFormatSplit[] splits) {
+  private List<FetchInputFormatSplit> splitSampling(SplitSample splitSample,
+      List<FetchInputFormatSplit> splits) {
     long totalSize = 0;
     for (FetchInputFormatSplit split: splits) {
         totalSize += split.getLength();
     }
-    List<FetchInputFormatSplit> result = new ArrayList<FetchInputFormatSplit>(splits.length);
+    List<FetchInputFormatSplit> result = new ArrayList<FetchInputFormatSplit>(splits.size());
     long targetSize = splitSample.getTargetSize(totalSize);
-    int startIndex = splitSample.getSeedNum() % splits.length;
+    int startIndex = splitSample.getSeedNum() % splits.size();
     long size = 0;
-    for (int i = 0; i < splits.length; i++) {
-      FetchInputFormatSplit split = splits[(startIndex + i) % splits.length];
+    for (int i = 0; i < splits.size(); i++) {
+      FetchInputFormatSplit split = splits.get((startIndex + i) % splits.size());
       result.add(split);
       long splitgLength = split.getLength();
       if (size + splitgLength >= targetSize) {
@@ -458,7 +510,7 @@ public class FetchOperator implements Serializable {
       }
       size += splitgLength;
     }
-    return result.toArray(new FetchInputFormatSplit[result.size()]);
+    return result;
   }
 
   /**
@@ -716,7 +768,7 @@ public class FetchOperator implements Serializable {
   private FileStatus[] listStatusUnderPath(FileSystem fs, Path p) throws IOException {
     boolean recursive = job.getBoolean(FileInputFormat.INPUT_DIR_RECURSIVE, false);
     // If this is in acid format always read it recursively regardless of what the jobconf says.
-    if (!recursive && !AcidUtils.isAcid(p, job)) {
+    if (!recursive && !AcidUtils.isAcid(fs, p, job)) {
       return fs.listStatus(p, FileUtils.HIDDEN_FILES_PATH_FILTER);
     }
     List<FileStatus> results = new ArrayList<FileStatus>();

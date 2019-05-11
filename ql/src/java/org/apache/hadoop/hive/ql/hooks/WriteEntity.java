@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -39,6 +39,7 @@ public class WriteEntity extends Entity implements Serializable {
 
   private boolean isTempURI = false;
   private transient boolean isDynamicPartitionWrite = false;
+  private transient boolean isTxnAnalyze = false;
 
   public static enum WriteType {
     DDL_EXCLUSIVE, // for use in DDL statements that require an exclusive lock,
@@ -63,7 +64,7 @@ public class WriteEntity extends Entity implements Serializable {
 
   public WriteEntity(Database database, WriteType type) {
     super(database, true);
-    writeType = type;
+    setWriteTypeInternal(type);
   }
 
   /**
@@ -74,12 +75,12 @@ public class WriteEntity extends Entity implements Serializable {
    */
   public WriteEntity(Table t, WriteType type) {
     super(t, true);
-    writeType = type;
+    setWriteTypeInternal(type);
   }
 
   public WriteEntity(Table t, WriteType type, boolean complete) {
     super(t, complete);
-    writeType = type;
+    setWriteTypeInternal(type);
   }
 
   /**
@@ -104,12 +105,12 @@ public class WriteEntity extends Entity implements Serializable {
    */
   public WriteEntity(Partition p, WriteType type) {
     super(p, true);
-    writeType = type;
+    setWriteTypeInternal(type);
   }
 
   public WriteEntity(DummyPartition p, WriteType type, boolean complete) {
     super(p, complete);
-    writeType = type;
+    setWriteTypeInternal(type);
   }
 
   /**
@@ -161,6 +162,9 @@ public class WriteEntity extends Entity implements Serializable {
    * @param type new operation type
    */
   public void setWriteType(WriteType type) {
+    setWriteTypeInternal(type);
+  }
+  private void setWriteTypeInternal(WriteType type) {
     writeType = type;
   }
 
@@ -220,6 +224,7 @@ public class WriteEntity extends Entity implements Serializable {
       case ADDPARTITION:
       case ADDSERDEPROPS:
       case ADDPROPS:
+      case UPDATESTATS:
         return WriteType.DDL_SHARED;
 
       case COMPACT:
@@ -239,4 +244,11 @@ public class WriteEntity extends Entity implements Serializable {
     return toString() + " Type=" + getTyp() + " WriteType=" + getWriteType() + " isDP=" + isDynamicPartitionWrite();
   }
 
+  public boolean isTxnAnalyze() {
+    return isTxnAnalyze;
+  }
+
+  public void setTxnAnalyze(boolean isTxnAnalyze) {
+    this.isTxnAnalyze = isTxnAnalyze;
+  }
 }

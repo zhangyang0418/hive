@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -255,6 +255,19 @@ public class TestBeelineArgParsing {
   }
 
   /**
+   * Test beeline with multiple initfiles in -i.
+   */
+  @Test
+  public void testMultipleInitFiles() {
+    TestBeeline bl = new TestBeeline();
+    String[] args = new String[] {"-i", "/url/to/file1", "-i", "/url/to/file2"};
+    Assert.assertEquals(0, bl.initArgs(args));
+    String[] files = bl.getOpts().getInitFiles();
+    Assert.assertEquals("/url/to/file1", files[0]);
+    Assert.assertEquals("/url/to/file2", files[1]);
+  }
+
+  /**
    * Displays the usage.
    */
   @Test
@@ -340,4 +353,19 @@ public class TestBeelineArgParsing {
     Assert.assertTrue(bl.getOpts().getMaxHistoryRows() == 100);
     bl.close();
   }
+
+  /**
+   * Test the file parameter option
+   * @throws Exception
+   */
+  @Test
+  public void testFileParam() throws Exception {
+    TestBeeline bl = new TestBeeline();
+    String args[] = new String[] {"-u", "url", "-n", "name",
+        "-p", "password", "-d", "driver", "-f", "hdfs://myscript"};
+    Assert.assertEquals(0, bl.initArgs(args));
+    Assert.assertTrue(bl.connectArgs.equals("url name password driver"));
+    Assert.assertTrue(bl.getOpts().getScriptFile().equals("hdfs://myscript"));
+  }
+
 }

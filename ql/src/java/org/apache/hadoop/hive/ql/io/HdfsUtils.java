@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -45,8 +45,8 @@ public class HdfsUtils {
   private static final Logger LOG = LoggerFactory.getLogger(HdfsUtils.class);
 
   public static Object getFileId(FileSystem fileSystem, Path path,
-      boolean allowSynthetic, boolean checkDefaultFs) throws IOException {
-    if (fileSystem instanceof DistributedFileSystem) {
+      boolean allowSynthetic, boolean checkDefaultFs, boolean forceSyntheticIds) throws IOException {
+    if (forceSyntheticIds == false && fileSystem instanceof DistributedFileSystem) {
       DistributedFileSystem dfs = (DistributedFileSystem) fileSystem;
       if ((!checkDefaultFs) || isDefaultFs(dfs)) {
         Object result = SHIMS.getFileId(dfs, path.toUri().getPath());

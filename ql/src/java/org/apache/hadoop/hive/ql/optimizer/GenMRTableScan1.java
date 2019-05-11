@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -28,6 +28,7 @@ import org.apache.hadoop.hive.ql.exec.TableScanOperator;
 import org.apache.hadoop.hive.ql.exec.Task;
 import org.apache.hadoop.hive.ql.exec.TaskFactory;
 import org.apache.hadoop.hive.ql.exec.mr.MapRedTask;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.hadoop.hive.ql.io.orc.OrcInputFormat;
 import org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat;
 import org.apache.hadoop.hive.ql.lib.Node;
@@ -43,6 +44,7 @@ import org.apache.hadoop.hive.ql.plan.StatsWork;
 import org.apache.hadoop.hive.ql.plan.BasicStatsWork;
 import org.apache.hadoop.hive.ql.plan.MapredWork;
 import org.apache.hadoop.hive.ql.plan.OperatorDesc;
+import org.apache.hadoop.hive.ql.stats.BasicStatsNoJobTask;
 import org.apache.hadoop.mapred.InputFormat;
 
 /**
@@ -64,6 +66,8 @@ public class GenMRTableScan1 implements NodeProcessor {
       Object... nodeOutputs) throws SemanticException {
     TableScanOperator op = (TableScanOperator) nd;
     GenMRProcContext ctx = (GenMRProcContext) opProcCtx;
+    ctx.reset();
+
     ParseContext parseCtx = ctx.getParseCtx();
     Table table = op.getConf().getTableMetadata();
     Class<? extends InputFormat> inputFormat = table.getInputFormatClass();
@@ -71,7 +75,7 @@ public class GenMRTableScan1 implements NodeProcessor {
 
     // create a dummy MapReduce task
     MapredWork currWork = GenMapRedUtils.getMapRedWork(parseCtx);
-    MapRedTask currTask = (MapRedTask) TaskFactory.get(currWork, parseCtx.getConf());
+    MapRedTask currTask = (MapRedTask) TaskFactory.get(currWork);
     ctx.setCurrTask(currTask);
     ctx.setCurrTopOp(op);
 
@@ -84,8 +88,7 @@ public class GenMRTableScan1 implements NodeProcessor {
 
         if (parseCtx.getQueryProperties().isAnalyzeCommand()) {
           boolean noScan = parseCtx.getQueryProperties().isNoScanAnalyzeCommand();
-          if (OrcInputFormat.class.isAssignableFrom(inputFormat) ||
-                  MapredParquetInputFormat.class.isAssignableFrom(inputFormat)) {
+          if (BasicStatsNoJobTask.canUseFooterScan(table, inputFormat)) {
             // For ORC and Parquet, all the following statements are the same
             // ANALYZE TABLE T [PARTITION (...)] COMPUTE STATISTICS
             // ANALYZE TABLE T [PARTITION (...)] COMPUTE STATISTICS noscan;
@@ -101,7 +104,7 @@ public class GenMRTableScan1 implements NodeProcessor {
               PrunedPartitionList partList = new PrunedPartitionList(table, confirmedParts, partCols, false);
               statWork.addInputPartitions(partList.getPartitions());
             }
-            Task<StatsWork> snjTask = TaskFactory.get(statWork, parseCtx.getConf());
+            Task<StatsWork> snjTask = TaskFactory.get(statWork);
             ctx.setCurrTask(snjTask);
             ctx.setCurrTopOp(null);
             ctx.getRootTasks().clear();
@@ -112,13 +115,14 @@ public class GenMRTableScan1 implements NodeProcessor {
             // The MR task is just a simple TableScanOperator
 
             BasicStatsWork statsWork = new BasicStatsWork(table.getTableSpec());
+            statsWork.setIsExplicitAnalyze(true);
 
             statsWork.setNoScanAnalyzeCommand(noScan);
             StatsWork columnStatsWork = new StatsWork(table, statsWork, parseCtx.getConf());
             columnStatsWork.collectStatsFromAggregator(op.getConf());
 
             columnStatsWork.setSourceTask(currTask);
-            Task<StatsWork> columnStatsTask = TaskFactory.get(columnStatsWork, parseCtx.getConf());
+            Task<StatsWork> columnStatsTask = TaskFactory.get(columnStatsWork);
             currTask.addDependentTask(columnStatsTask);
             if (!ctx.getRootTasks().contains(currTask)) {
               ctx.getRootTasks().add(currTask);

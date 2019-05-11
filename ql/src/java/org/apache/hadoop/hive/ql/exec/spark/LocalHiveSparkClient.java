@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.hadoop.hive.ql.exec.DagUtils;
 import org.apache.hive.spark.client.SparkClientUtilities;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -60,31 +61,33 @@ import com.google.common.base.Strings;
  * environment and execute spark work.
  */
 public class LocalHiveSparkClient implements HiveSparkClient {
+
   private static final long serialVersionUID = 1L;
 
-  private static final String MR_JAR_PROPERTY = "tmpjars";
-  protected static final transient Logger LOG = LoggerFactory
-      .getLogger(LocalHiveSparkClient.class);
+  private static final transient Logger LOG = LoggerFactory
+          .getLogger(LocalHiveSparkClient.class);
 
+  private static final String MR_JAR_PROPERTY = "tmpjars";
   private static final Splitter CSV_SPLITTER = Splitter.on(",").omitEmptyStrings();
 
   private static LocalHiveSparkClient client;
-
-  public static synchronized LocalHiveSparkClient getInstance(
-      SparkConf sparkConf, HiveConf hiveConf) throws FileNotFoundException, MalformedURLException {
-    if (client == null) {
-      client = new LocalHiveSparkClient(sparkConf, hiveConf);
-    }
-    return client;
-  }
+  private int activeSessions = 0;
 
   private final JavaSparkContext sc;
 
   private final List<String> localJars = new ArrayList<String>();
-
   private final List<String> localFiles = new ArrayList<String>();
 
   private final JobMetricsListener jobMetricsListener;
+
+  public static synchronized LocalHiveSparkClient getInstance(SparkConf sparkConf, HiveConf hiveConf)
+      throws FileNotFoundException, MalformedURLException {
+    if (client == null) {
+      client = new LocalHiveSparkClient(sparkConf, hiveConf);
+    }
+    ++client.activeSessions;
+    return client;
+  }
 
   private LocalHiveSparkClient(SparkConf sparkConf, HiveConf hiveConf)
       throws FileNotFoundException, MalformedURLException {
@@ -102,7 +105,7 @@ public class LocalHiveSparkClient implements HiveSparkClient {
       sc.addJar(regJar);
     }
     jobMetricsListener = new JobMetricsListener();
-    sc.sc().listenerBus().addListener(jobMetricsListener);
+    sc.sc().addSparkListener(jobMetricsListener);
   }
 
   @Override
@@ -160,8 +163,15 @@ public class LocalHiveSparkClient implements HiveSparkClient {
 
     // Execute generated plan.
     JavaPairRDD<HiveKey, BytesWritable> finalRDD = plan.generateGraph();
+
+    // We get the query name for this SparkTask and set it to the description for the associated
+    // Spark job; query names are guaranteed to be unique for each Spark job because the task id
+    // is concatenated to the end of the query name
+    sc.setJobGroup("queryId = " + sparkWork.getQueryId(), DagUtils.getQueryName(jobConf));
+
     // We use Spark RDD async action to submit job as it's the only way to get jobId now.
     JavaFutureAction<Void> future = finalRDD.foreachAsync(HiveVoidFunction.getInstance());
+
     // As we always use foreach action to submit RDD graph, it would only trigger one job.
     int jobId = future.jobIds().get(0);
     LocalSparkJobStatus sparkJobStatus = new LocalSparkJobStatus(
@@ -230,10 +240,13 @@ public class LocalHiveSparkClient implements HiveSparkClient {
   @Override
   public void close() {
     synchronized (LocalHiveSparkClient.class) {
-      client = null;
-    }
-    if (sc != null) {
-      sc.stop();
+      if (--activeSessions == 0) {
+        client = null;
+        if (sc != null) {
+          LOG.debug("Shutting down the SparkContext");
+          sc.stop();
+        }
+      }
     }
   }
 }

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -39,6 +39,8 @@ public abstract class AlterPartitionMessage extends HCatEventMessage {
   public abstract String getTableType();
 
   public abstract Map<String,String> getKeyValues();
+
+  public abstract Long getWriteId();
 
   @Override
   public HCatEventMessage checkValid() {

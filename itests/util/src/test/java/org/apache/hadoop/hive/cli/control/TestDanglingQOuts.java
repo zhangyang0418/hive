@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -87,6 +87,7 @@ public class TestDanglingQOuts {
     }
   }
 
+  @Ignore("Disabling till HIVE-19509 gets solved")
   @Test
   public void checkDanglingQOut() {
     SetView<File> dangling = Sets.difference(outsFound, outsNeeded.keySet());

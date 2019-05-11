@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -18,8 +18,8 @@
 
 package org.apache.hive.jdbc;
 
-import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.codec.binary.Base64;
+import org.apache.hadoop.hive.common.classification.InterfaceAudience.LimitedPrivate;
 import org.apache.hive.jdbc.logs.InPlaceUpdateStream;
 import org.apache.hive.service.cli.RowSet;
 import org.apache.hive.service.cli.RowSetFactory;
@@ -37,7 +37,6 @@ import org.apache.hive.service.rpc.thrift.TGetOperationStatusReq;
 import org.apache.hive.service.rpc.thrift.TGetOperationStatusResp;
 import org.apache.hive.service.rpc.thrift.TGetQueryIdReq;
 import org.apache.hive.service.rpc.thrift.TOperationHandle;
-import org.apache.hive.service.rpc.thrift.TOperationState;
 import org.apache.hive.service.rpc.thrift.TSessionHandle;
 import org.apache.thrift.TException;
 import org.slf4j.Logger;
@@ -269,7 +268,7 @@ public class HiveStatement implements java.sql.Statement {
     if (!status.isHasResultSet() && !stmtHandle.isHasResultSet()) {
       return false;
     }
-    resultSet =  new HiveQueryResultSet.Builder(this).setClient(client).setSessionHandle(sessHandle)
+    resultSet = new HiveQueryResultSet.Builder(this).setClient(client)
         .setStmtHandle(stmtHandle).setMaxRows(maxRows).setFetchSize(fetchSize)
         .setScrollable(isScrollableResultset)
         .build();
@@ -298,9 +297,10 @@ public class HiveStatement implements java.sql.Statement {
       return false;
     }
     resultSet =
-        new HiveQueryResultSet.Builder(this).setClient(client).setSessionHandle(sessHandle)
-            .setStmtHandle(stmtHandle).setMaxRows(maxRows).setFetchSize(fetchSize)
-            .setScrollable(isScrollableResultset).build();
+        new HiveQueryResultSet.Builder(this).setClient(client)
+            .setStmtHandle(stmtHandle).setMaxRows(maxRows)
+            .setFetchSize(fetchSize).setScrollable(isScrollableResultset)
+            .build();
     return true;
   }
 
@@ -369,14 +369,16 @@ public class HiveStatement implements java.sql.Statement {
     TGetOperationStatusResp statusResp = null;
 
     // Poll on the operation status, till the operation is complete
-    while (!isOperationComplete) {
+    do {
       try {
         /**
          * For an async SQLOperation, GetOperationStatus will use the long polling approach It will
          * essentially return after the HIVE_SERVER2_LONG_POLLING_TIMEOUT (a server config) expires
          */
         statusResp = client.GetOperationStatus(statusReq);
-        inPlaceUpdateStream.update(statusResp.getProgressUpdateResponse());
+        if(!isOperationComplete) {
+          inPlaceUpdateStream.update(statusResp.getProgressUpdateResponse());
+        }
         Utils.verifySuccessWithInfo(statusResp.getStatus());
         if (statusResp.isSetOperationState()) {
           switch (statusResp.getOperationState()) {
@@ -414,7 +416,7 @@ public class HiveStatement implements java.sql.Statement {
         isLogBeingGenerated = false;
         throw new SQLException(e.toString(), "08S01", e);
       }
-    }
+    } while (!isOperationComplete);
 
     /*
       we set progress bar to be completed when hive query execution has completed
@@ -509,7 +511,8 @@ public class HiveStatement implements java.sql.Statement {
   @Override
   public int executeUpdate(String sql) throws SQLException {
     execute(sql);
-    return 0;
+    return getUpdateCount();
+    //return getLargeUpdateCount(); - not currently implemented... wrong type
   }
 
   /*
@@ -708,8 +711,16 @@ public class HiveStatement implements java.sql.Statement {
      * client might end up using executeAsync and then call this to check if the query run is
      * finished.
      */
-    waitForOperationToComplete();
-    return -1;
+    long numModifiedRows = -1;
+    TGetOperationStatusResp resp = waitForOperationToComplete();
+    if (resp != null) {
+      numModifiedRows = resp.getNumModifiedRows();
+    }
+    if (numModifiedRows == -1 || numModifiedRows > Integer.MAX_VALUE) {
+      LOG.warn("Number of rows is greater than Integer.MAX_VALUE");
+      return -1;
+    }
+    return (int) numModifiedRows;
   }
 
   /*
@@ -995,8 +1006,19 @@ public class HiveStatement implements java.sql.Statement {
     this.inPlaceUpdateStream = stream;
   }
 
-  @VisibleForTesting
+  /**
+   * Returns the Query ID if it is running.
+   * This method is a public API for usage outside of Hive, although it is not part of the
+   * interface java.sql.Statement.
+   * @return Valid query ID if it is running else returns NULL.
+   * @throws SQLException If any internal failures.
+   */
+  @LimitedPrivate(value={"Hive and closely related projects."})
   public String getQueryId() throws SQLException {
+    if (stmtHandle == null) {
+      // If query is not running or already closed.
+      return null;
+    }
     try {
       return client.GetQueryId(new TGetQueryIdReq(stmtHandle)).getQueryId();
     } catch (TException e) {

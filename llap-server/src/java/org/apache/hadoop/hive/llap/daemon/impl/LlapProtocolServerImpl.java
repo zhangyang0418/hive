@@ -25,6 +25,9 @@ import com.google.protobuf.BlockingService;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcController;
 import com.google.protobuf.ServiceException;
+
+import org.apache.hadoop.hive.llap.io.api.LlapIo;
+import org.apache.hadoop.hive.llap.io.api.LlapProxy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -62,6 +65,7 @@ public class LlapProtocolServerImpl extends AbstractService
     implements LlapProtocolBlockingPB, LlapManagementProtocolPB {
 
   private static final Logger LOG = LoggerFactory.getLogger(LlapProtocolServerImpl.class);
+
   private enum TokenRequiresSigning {
     TRUE, FALSE, EXCEPT_OWNER
   }
@@ -91,6 +95,18 @@ public class LlapProtocolServerImpl extends AbstractService
     this.daemonId = daemonId;
     LOG.info("Creating: " + LlapProtocolServerImpl.class.getSimpleName() +
         " with port configured to: " + srvPort);
+  }
+
+  @Override
+  public LlapDaemonProtocolProtos.RegisterDagResponseProto registerDag(
+      RpcController controller,
+      LlapDaemonProtocolProtos.RegisterDagRequestProto request)
+      throws ServiceException {
+    try {
+      return containerRunner.registerDag(request);
+    } catch (IOException e) {
+      throw new ServiceException(e);
+    }
   }
 
   @Override
@@ -270,6 +286,20 @@ public class LlapProtocolServerImpl extends AbstractService
     ByteString bs = ByteString.copyFrom(out.toByteArray());
     GetTokenResponseProto response = GetTokenResponseProto.newBuilder().setToken(bs).build();
     return response;
+  }
+
+  @Override
+  public LlapDaemonProtocolProtos.PurgeCacheResponseProto purgeCache(final RpcController controller,
+    final LlapDaemonProtocolProtos.PurgeCacheRequestProto request) throws ServiceException {
+    LlapDaemonProtocolProtos.PurgeCacheResponseProto.Builder responseProtoBuilder = LlapDaemonProtocolProtos
+      .PurgeCacheResponseProto.newBuilder();
+    LlapIo<?> llapIo = LlapProxy.getIo();
+    if (llapIo != null) {
+      responseProtoBuilder.setPurgedMemoryBytes(llapIo.purge());
+    } else {
+      responseProtoBuilder.setPurgedMemoryBytes(0);
+    }
+    return responseProtoBuilder.build();
   }
 
   private boolean determineIfSigningIsRequired(UserGroupInformation callingUser) {

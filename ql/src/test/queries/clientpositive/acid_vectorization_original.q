@@ -26,7 +26,7 @@ CREATE TEMPORARY FUNCTION runWorker AS 'org.apache.hadoop.hive.ql.udf.UDFRunWork
 create table mydual(a int);
 insert into mydual values(1);
 
-CREATE TABLE over10k(t tinyint,
+CREATE TABLE over10k_n2(t tinyint,
            si smallint,
            i int,
            b bigint,
@@ -41,7 +41,7 @@ ROW FORMAT DELIMITED FIELDS TERMINATED BY '|'
 STORED AS TEXTFILE;
 
 --oddly this has 9999 rows not > 10K
-LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over10k;
+LOAD DATA LOCAL INPATH '../../data/files/over1k' OVERWRITE INTO TABLE over10k_n2;
 
 CREATE TABLE over10k_orc_bucketed(t tinyint,
            si smallint,
@@ -56,14 +56,14 @@ CREATE TABLE over10k_orc_bucketed(t tinyint,
            bin binary) CLUSTERED BY(si) INTO 4 BUCKETS STORED AS ORC;
 
 -- this produces about 250 distinct values across all 4 equivalence classes
-select distinct si, si%4 from over10k order by si;
+select distinct si, si%4 from over10k_n2 order by si;
 
--- explain insert into over10k_orc_bucketed select * from over10k;
-insert into over10k_orc_bucketed select * from over10k;
+-- explain insert into over10k_orc_bucketed select * from over10k_n2;
+insert into over10k_orc_bucketed select * from over10k_n2;
 
 dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/over10k_orc_bucketed;
 -- create copy_N files
-insert into over10k_orc_bucketed select * from over10k;
+insert into over10k_orc_bucketed select * from over10k_n2;
 
 -- this output of this is masked in .out - it is visible in .orig
 dfs -ls ${hiveconf:hive.metastore.warehouse.dir}/over10k_orc_bucketed;
@@ -133,3 +133,30 @@ select ROW__ID, * from over10k_orc_bucketed where ROW__ID is null;
 -- select ROW__ID, count(*) from over10k_orc_bucketed group by ROW__ID having count(*) > 1;
 
 -- select ROW__ID, * from over10k_orc_bucketed where ROW__ID is null;
+
+CREATE TABLE over10k_orc STORED AS ORC as select * from over10k_n2 where t between 3 and 4;
+-- Make sure there are multiple original files
+INSERT INTO over10k_orc select * from over10k_n2 where t between 3 and 4;
+alter table over10k_orc set TBLPROPERTIES ('transactional'='true');
+
+-- row id is projected but there are no delete deltas
+set hive.exec.orc.split.strategy=ETL;
+select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid and o1.ROW__ID.writeid == o2.ROW__ID.writeid and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid;
+
+set hive.exec.orc.split.strategy=BI;
+select o1.ROW__ID r1, o1.* from over10k_orc o1 join over10k_orc o2
+on o1.ROW__ID.rowid == o2.ROW__ID.rowid
+and o1.ROW__ID.writeid == o2.ROW__ID.writeid
+and o1.ROW__ID.bucketid == o2.ROW__ID.bucketid;
+
+delete from over10k_orc where t = 3;
+
+-- row id not projected but has delete deltas
+set hive.exec.orc.split.strategy=ETL;
+select t, count(*) from over10k_orc
+group by t;
+
+set hive.exec.orc.split.strategy=BI;
+select t, count(*) from over10k_orc
+group by t;

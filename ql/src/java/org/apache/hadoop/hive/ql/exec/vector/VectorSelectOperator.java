@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,6 +19,7 @@
 package org.apache.hadoop.hive.ql.exec.vector;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.apache.hadoop.conf.Configuration;
@@ -135,7 +136,7 @@ public class VectorSelectOperator extends Operator<SelectDesc>
 
     // Just forward the row as is
     if (conf.isSelStarNoCompute()) {
-      forward(row, inputObjInspectors[tag], true);
+      vectorForward((VectorizedRowBatch) row);
       return;
     }
 
@@ -154,7 +155,7 @@ public class VectorSelectOperator extends Operator<SelectDesc>
     int originalProjectionSize = vrg.projectionSize;
     vrg.projectionSize = projectedOutputColumns.length;
     vrg.projectedColumns = this.projectedOutputColumns;
-    forward(vrg, outputObjInspector, true);
+    vectorForward((VectorizedRowBatch) row);
 
     // Revert the projected columns back, because vrg will be re-used.
     vrg.projectionSize = originalProjectionSize;

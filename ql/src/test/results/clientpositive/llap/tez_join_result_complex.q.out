@@ -133,6 +133,10 @@ inner join
 service_request_clean b
 on a.contact_event_id = b.cnctevn_id
 PREHOOK: type: CREATETABLE_AS_SELECT
+PREHOOK: Input: default@ct_events_clean
+PREHOOK: Input: default@service_request_clean
+PREHOOK: Output: database:default
+PREHOOK: Output: default@ct_events1_test
 POSTHOOK: query: explain extended
 create table ct_events1_test
 as select  a.*,
@@ -148,6 +152,17 @@ inner join
 service_request_clean b
 on a.contact_event_id = b.cnctevn_id
 POSTHOOK: type: CREATETABLE_AS_SELECT
+POSTHOOK: Input: default@ct_events_clean
+POSTHOOK: Input: default@service_request_clean
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@ct_events1_test
+OPTIMIZED SQL: SELECT `t0`.`contact_event_id`, `t0`.`ce_create_dt`, `t0`.`ce_end_dt`, `t0`.`contact_type`, `t0`.`cnctevs_cd`, `t0`.`contact_mode`, `t0`.`cntvnst_stts_cd`, `t0`.`total_transfers`, `t0`.`ce_notes`, `t2`.`svcrqst_id`, `t2`.`svcrqct_cds`, `t2`.`svcrtyp_cd`, `t2`.`cmpltyp_cd`, `t2`.`sum_reason_cd` AS `src`, `t2`.`cnctmd_cd`, `t2`.`notes`
+FROM (SELECT `contact_event_id`, `ce_create_dt`, `ce_end_dt`, `contact_type`, `cnctevs_cd`, `contact_mode`, `cntvnst_stts_cd`, `total_transfers`, `ce_notes`
+FROM `default`.`ct_events_clean`
+WHERE `contact_event_id` IS NOT NULL) AS `t0`
+INNER JOIN (SELECT `cnctevn_id`, `svcrqst_id`, `cnctmd_cd`, `svcrtyp_cd`, `cmpltyp_cd`, `sum_reason_cd`, `svcrqct_cds`, `notes`
+FROM `default`.`service_request_clean`
+WHERE `cnctevn_id` IS NOT NULL) AS `t2` ON `t0`.`contact_event_id` = `t2`.`cnctevn_id`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -167,6 +182,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
+                  filterExpr: contact_event_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 3212 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -198,6 +214,7 @@ STAGE PLANS:
                   output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                   properties:
                     bucket_count -1
+                    bucketing_version 2
                     column.name.delimiter ,
                     columns contact_event_id,ce_create_dt,ce_end_dt,contact_type,cnctevs_cd,contact_mode,cntvnst_stts_cd,total_transfers,ce_notes
                     columns.comments 
@@ -222,6 +239,7 @@ STAGE PLANS:
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
                       bucket_count -1
+                      bucketing_version 2
                       column.name.delimiter ,
                       columns contact_event_id,ce_create_dt,ce_end_dt,contact_type,cnctevs_cd,contact_mode,cntvnst_stts_cd,total_transfers,ce_notes
                       columns.comments 
@@ -249,6 +267,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: cnctevn_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 4944 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -308,6 +327,7 @@ STAGE PLANS:
                   output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                   properties:
                     bucket_count -1
+                    bucketing_version 2
                     column.name.delimiter ,
                     columns cnctevn_id,svcrqst_id,svcrqst_crt_dts,subject_seq_no,plan_component,cust_segment,cnctyp_cd,cnctmd_cd,cnctevs_cd,svcrtyp_cd,svrstyp_cd,cmpltyp_cd,catsrsn_cd,apealvl_cd,cnstnty_cd,svcrqst_asrqst_ind,svcrqst_rtnorig_in,svcrqst_vwasof_dt,sum_reason_cd,sum_reason,crsr_master_claim_index,svcrqct_cds,svcrqst_lupdt,crsr_lupdt,cntevsds_lupdt,ignore_me,notes
                     columns.comments 
@@ -332,6 +352,7 @@ STAGE PLANS:
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
                       bucket_count -1
+                      bucketing_version 2
                       column.name.delimiter ,
                       columns cnctevn_id,svcrqst_id,svcrqst_crt_dts,subject_seq_no,plan_component,cust_segment,cnctyp_cd,cnctmd_cd,cnctevs_cd,svcrtyp_cd,svrstyp_cd,cmpltyp_cd,catsrsn_cd,apealvl_cd,cnstnty_cd,svcrqst_asrqst_ind,svcrqst_rtnorig_in,svcrqst_vwasof_dt,sum_reason_cd,sum_reason,crsr_master_claim_index,svcrqct_cds,svcrqst_lupdt,crsr_lupdt,cntevsds_lupdt,ignore_me,notes
                       columns.comments 
@@ -360,13 +381,12 @@ STAGE PLANS:
     Dependency Collection
 
   Stage: Stage-4
-      Create Table Operator:
-        Create Table
-          columns: contact_event_id string, ce_create_dt string, ce_end_dt string, contact_type string, cnctevs_cd string, contact_mode string, cntvnst_stts_cd string, total_transfers int, ce_notes array<string>, svcrqst_id string, svcrqct_cds array<string>, svcrtyp_cd string, cmpltyp_cd string, src string, cnctmd_cd string, notes array<string>
-          input format: org.apache.hadoop.mapred.TextInputFormat
-          output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
-          serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-          name: default.ct_events1_test
+    Create Table
+      columns: contact_event_id string, ce_create_dt string, ce_end_dt string, contact_type string, cnctevs_cd string, contact_mode string, cntvnst_stts_cd string, total_transfers int, ce_notes array<string>, svcrqst_id string, svcrqct_cds array<string>, svcrtyp_cd string, cmpltyp_cd string, src string, cnctmd_cd string, notes array<string>
+      input format: org.apache.hadoop.mapred.TextInputFormat
+      output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+      serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+      name: default.ct_events1_test
 
   Stage: Stage-3
     Stats Work
@@ -1118,6 +1138,10 @@ inner join
 service_request_clean b
 on a.contact_event_id = b.cnctevn_id
 PREHOOK: type: CREATETABLE_AS_SELECT
+PREHOOK: Input: default@ct_events_clean
+PREHOOK: Input: default@service_request_clean
+PREHOOK: Output: database:default
+PREHOOK: Output: default@ct_events1_test
 POSTHOOK: query: explain extended
 create table ct_events1_test
 as select  a.*,
@@ -1133,6 +1157,17 @@ inner join
 service_request_clean b
 on a.contact_event_id = b.cnctevn_id
 POSTHOOK: type: CREATETABLE_AS_SELECT
+POSTHOOK: Input: default@ct_events_clean
+POSTHOOK: Input: default@service_request_clean
+POSTHOOK: Output: database:default
+POSTHOOK: Output: default@ct_events1_test
+OPTIMIZED SQL: SELECT `t0`.`contact_event_id`, `t0`.`ce_create_dt`, `t0`.`ce_end_dt`, `t0`.`contact_type`, `t0`.`cnctevs_cd`, `t0`.`contact_mode`, `t0`.`cntvnst_stts_cd`, `t0`.`total_transfers`, `t0`.`ce_notes`, `t2`.`svcrqst_id`, `t2`.`svcrqct_cds`, `t2`.`svcrtyp_cd`, `t2`.`cmpltyp_cd`, `t2`.`sum_reason_cd` AS `src`, `t2`.`cnctmd_cd`, `t2`.`notes`
+FROM (SELECT `contact_event_id`, `ce_create_dt`, `ce_end_dt`, `contact_type`, `cnctevs_cd`, `contact_mode`, `cntvnst_stts_cd`, `total_transfers`, `ce_notes`
+FROM `default`.`ct_events_clean`
+WHERE `contact_event_id` IS NOT NULL) AS `t0`
+INNER JOIN (SELECT `cnctevn_id`, `svcrqst_id`, `cnctmd_cd`, `svcrtyp_cd`, `cmpltyp_cd`, `sum_reason_cd`, `svcrqct_cds`, `notes`
+FROM `default`.`service_request_clean`
+WHERE `cnctevn_id` IS NOT NULL) AS `t2` ON `t0`.`contact_event_id` = `t2`.`cnctevn_id`
 STAGE DEPENDENCIES:
   Stage-1 is a root stage
   Stage-2 depends on stages: Stage-1
@@ -1152,6 +1187,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: a
+                  filterExpr: contact_event_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 3212 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -1183,6 +1219,7 @@ STAGE PLANS:
                   output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                   properties:
                     bucket_count -1
+                    bucketing_version 2
                     column.name.delimiter ,
                     columns contact_event_id,ce_create_dt,ce_end_dt,contact_type,cnctevs_cd,contact_mode,cntvnst_stts_cd,total_transfers,ce_notes
                     columns.comments 
@@ -1207,6 +1244,7 @@ STAGE PLANS:
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
                       bucket_count -1
+                      bucketing_version 2
                       column.name.delimiter ,
                       columns contact_event_id,ce_create_dt,ce_end_dt,contact_type,cnctevs_cd,contact_mode,cntvnst_stts_cd,total_transfers,ce_notes
                       columns.comments 
@@ -1234,6 +1272,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: b
+                  filterExpr: cnctevn_id is not null (type: boolean)
                   Statistics: Num rows: 1 Data size: 4944 Basic stats: COMPLETE Column stats: NONE
                   GatherStats: false
                   Filter Operator
@@ -1293,6 +1332,7 @@ STAGE PLANS:
                   output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                   properties:
                     bucket_count -1
+                    bucketing_version 2
                     column.name.delimiter ,
                     columns cnctevn_id,svcrqst_id,svcrqst_crt_dts,subject_seq_no,plan_component,cust_segment,cnctyp_cd,cnctmd_cd,cnctevs_cd,svcrtyp_cd,svrstyp_cd,cmpltyp_cd,catsrsn_cd,apealvl_cd,cnstnty_cd,svcrqst_asrqst_ind,svcrqst_rtnorig_in,svcrqst_vwasof_dt,sum_reason_cd,sum_reason,crsr_master_claim_index,svcrqct_cds,svcrqst_lupdt,crsr_lupdt,cntevsds_lupdt,ignore_me,notes
                     columns.comments 
@@ -1317,6 +1357,7 @@ STAGE PLANS:
                     output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
                     properties:
                       bucket_count -1
+                      bucketing_version 2
                       column.name.delimiter ,
                       columns cnctevn_id,svcrqst_id,svcrqst_crt_dts,subject_seq_no,plan_component,cust_segment,cnctyp_cd,cnctmd_cd,cnctevs_cd,svcrtyp_cd,svrstyp_cd,cmpltyp_cd,catsrsn_cd,apealvl_cd,cnstnty_cd,svcrqst_asrqst_ind,svcrqst_rtnorig_in,svcrqst_vwasof_dt,sum_reason_cd,sum_reason,crsr_master_claim_index,svcrqct_cds,svcrqst_lupdt,crsr_lupdt,cntevsds_lupdt,ignore_me,notes
                       columns.comments 
@@ -1345,13 +1386,12 @@ STAGE PLANS:
     Dependency Collection
 
   Stage: Stage-4
-      Create Table Operator:
-        Create Table
-          columns: contact_event_id string, ce_create_dt string, ce_end_dt string, contact_type string, cnctevs_cd string, contact_mode string, cntvnst_stts_cd string, total_transfers int, ce_notes array<string>, svcrqst_id string, svcrqct_cds array<string>, svcrtyp_cd string, cmpltyp_cd string, src string, cnctmd_cd string, notes array<string>
-          input format: org.apache.hadoop.mapred.TextInputFormat
-          output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
-          serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
-          name: default.ct_events1_test
+    Create Table
+      columns: contact_event_id string, ce_create_dt string, ce_end_dt string, contact_type string, cnctevs_cd string, contact_mode string, cntvnst_stts_cd string, total_transfers int, ce_notes array<string>, svcrqst_id string, svcrqct_cds array<string>, svcrtyp_cd string, cmpltyp_cd string, src string, cnctmd_cd string, notes array<string>
+      input format: org.apache.hadoop.mapred.TextInputFormat
+      output format: org.apache.hadoop.hive.ql.io.IgnoreKeyTextOutputFormat
+      serde name: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+      name: default.ct_events1_test
 
   Stage: Stage-3
     Stats Work

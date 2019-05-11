@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Collections;
 
 import junit.framework.TestCase;
 
@@ -49,6 +50,7 @@ import org.apache.hadoop.hive.ql.session.SessionState;
 import org.apache.hadoop.hive.serde.serdeConstants;
 import org.apache.hadoop.hive.shims.Utils;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.junit.Assert;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -82,6 +84,10 @@ public class TestMetastoreAuthorizationProvider extends TestCase {
 
   protected HiveConf createHiveConf() throws Exception {
     return new HiveConf(this.getClass());
+  }
+
+  protected String getProxyUserName() {
+    return null;
   }
 
   @Override
@@ -238,6 +244,8 @@ public class TestMetastoreAuthorizationProvider extends TestCase {
 
     assertEquals(0,ret.getResponseCode()); // now it succeeds.
     Table tbl = msc.getTable(dbName, tblName);
+    Assert.assertTrue(tbl.isSetId());
+    tbl.unsetId();
 
     validateCreateTable(tbl,tblName, dbName);
 
@@ -300,6 +308,19 @@ public class TestMetastoreAuthorizationProvider extends TestCase {
 
     ret = driver.run("alter table "+tblName+" add partition (b='2011')");
     assertEquals(0,ret.getResponseCode());
+
+    String proxyUserName = getProxyUserName();
+    if (proxyUserName != null) {
+      // for storage based authorization, user having proxy privilege should be allowed to do operation
+      // even if the file permission is not there.
+      InjectableDummyAuthenticator.injectUserName(proxyUserName);
+      InjectableDummyAuthenticator.injectGroupNames(Collections.singletonList(proxyUserName));
+      InjectableDummyAuthenticator.injectMode(true);
+      disallowCreateInTbl(tbl.getTableName(), proxyUserName, tbl.getSd().getLocation());
+      ret = driver.run("alter table "+tblName+" add partition (b='2012')");
+      assertEquals(0, ret.getResponseCode());
+      InjectableDummyAuthenticator.injectMode(false);
+    }
 
     allowDropOnTable(tblName, userName, tbl.getSd().getLocation());
     allowDropOnDb(dbName,userName,db.getLocationUri());

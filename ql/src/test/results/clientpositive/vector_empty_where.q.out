@@ -1,9 +1,13 @@
 PREHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cstring1
 PREHOOK: type: QUERY
+PREHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cstring1
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -19,7 +23,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: alltypesorc
-            Statistics: Num rows: 12288 Data size: 2641964 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 12288 Data size: 899146 Basic stats: COMPLETE Column stats: COMPLETE
             TableScan Vectorization:
                 native: true
             Filter Operator
@@ -28,7 +32,7 @@ STAGE PLANS:
                   native: true
                   predicateExpression: SelectColumnIsTrue(col 13:boolean)(children: CastStringToBoolean(col 6) -> 13:boolean)
               predicate: cstring1 (type: string)
-              Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6144 Data size: 449620 Basic stats: COMPLETE Column stats: COMPLETE
               Select Operator
                 expressions: cint (type: int)
                 outputColumnNames: cint
@@ -36,7 +40,7 @@ STAGE PLANS:
                     className: VectorSelectOperator
                     native: true
                     projectedOutputColumnNums: [2]
-                Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6144 Data size: 449620 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   Group By Vectorization:
                       className: VectorGroupByOperator
@@ -46,9 +50,10 @@ STAGE PLANS:
                       vectorProcessingMode: HASH
                       projectedOutputColumnNums: []
                   keys: cint (type: int)
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
-                  Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: int)
                     sort order: +
@@ -58,13 +63,13 @@ STAGE PLANS:
                         native: false
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                         nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-                    Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
       Execution mode: vectorized
       Map Vectorization:
           enabled: true
           enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-          inputFormatFeatureSupport: []
-          featureSupportInUse: []
+          inputFormatFeatureSupport: [DECIMAL_64]
+          featureSupportInUse: [DECIMAL_64]
           inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
           allNative: false
           usesVectorUDFAdaptor: false
@@ -78,12 +83,12 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: partial2
           outputColumnNames: _col0
-          Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
           Group By Operator
             aggregations: count(_col0)
             mode: partial2
             outputColumnNames: _col0
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             File Output Operator
               compressed: false
               table:
@@ -104,7 +109,7 @@ STAGE PLANS:
                   native: false
                   nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                   nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: bigint)
       Execution mode: vectorized
       Map Vectorization:
@@ -125,10 +130,10 @@ STAGE PLANS:
           aggregations: count(VALUE._col0)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -152,9 +157,13 @@ POSTHOOK: Input: default@alltypesorc
 PREHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cint
 PREHOOK: type: QUERY
+PREHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cint
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -170,7 +179,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: alltypesorc
-            Statistics: Num rows: 12288 Data size: 2641964 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 12288 Data size: 36696 Basic stats: COMPLETE Column stats: COMPLETE
             TableScan Vectorization:
                 native: true
             Filter Operator
@@ -179,7 +188,7 @@ STAGE PLANS:
                   native: true
                   predicateExpression: SelectColumnIsTrue(col 13:boolean)(children: CastLongToBooleanViaLongToLong(col 2:int) -> 13:boolean)
               predicate: cint (type: int)
-              Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6144 Data size: 18348 Basic stats: COMPLETE Column stats: COMPLETE
               Group By Operator
                 Group By Vectorization:
                     className: VectorGroupByOperator
@@ -189,9 +198,10 @@ STAGE PLANS:
                     vectorProcessingMode: HASH
                     projectedOutputColumnNums: []
                 keys: cint (type: int)
+                minReductionHashAggr: 0.99
                 mode: hash
                 outputColumnNames: _col0
-                Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 3053 Data size: 9120 Basic stats: COMPLETE Column stats: COMPLETE
                 Reduce Output Operator
                   key expressions: _col0 (type: int)
                   sort order: +
@@ -201,13 +211,13 @@ STAGE PLANS:
                       native: false
                       nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                       nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-                  Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 3053 Data size: 9120 Basic stats: COMPLETE Column stats: COMPLETE
       Execution mode: vectorized
       Map Vectorization:
           enabled: true
           enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-          inputFormatFeatureSupport: []
-          featureSupportInUse: []
+          inputFormatFeatureSupport: [DECIMAL_64]
+          featureSupportInUse: [DECIMAL_64]
           inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
           allNative: false
           usesVectorUDFAdaptor: false
@@ -221,12 +231,12 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: partial2
           outputColumnNames: _col0
-          Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 3053 Data size: 9120 Basic stats: COMPLETE Column stats: COMPLETE
           Group By Operator
             aggregations: count(_col0)
             mode: partial2
             outputColumnNames: _col0
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             File Output Operator
               compressed: false
               table:
@@ -247,7 +257,7 @@ STAGE PLANS:
                   native: false
                   nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                   nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: bigint)
       Execution mode: vectorized
       Map Vectorization:
@@ -268,10 +278,10 @@ STAGE PLANS:
           aggregations: count(VALUE._col0)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -295,9 +305,13 @@ POSTHOOK: Input: default@alltypesorc
 PREHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cfloat
 PREHOOK: type: QUERY
+PREHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where cfloat
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -313,7 +327,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: alltypesorc
-            Statistics: Num rows: 12288 Data size: 2641964 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 12288 Data size: 73392 Basic stats: COMPLETE Column stats: COMPLETE
             TableScan Vectorization:
                 native: true
             Filter Operator
@@ -322,7 +336,7 @@ STAGE PLANS:
                   native: true
                   predicateExpression: SelectColumnIsTrue(col 13:boolean)(children: CastDoubleToBooleanViaDoubleToLong(col 4:float) -> 13:boolean)
               predicate: cfloat (type: float)
-              Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6144 Data size: 36696 Basic stats: COMPLETE Column stats: COMPLETE
               Select Operator
                 expressions: cint (type: int)
                 outputColumnNames: cint
@@ -330,7 +344,7 @@ STAGE PLANS:
                     className: VectorSelectOperator
                     native: true
                     projectedOutputColumnNums: [2]
-                Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6144 Data size: 36696 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   Group By Vectorization:
                       className: VectorGroupByOperator
@@ -340,9 +354,10 @@ STAGE PLANS:
                       vectorProcessingMode: HASH
                       projectedOutputColumnNums: []
                   keys: cint (type: int)
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
-                  Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: int)
                     sort order: +
@@ -352,13 +367,13 @@ STAGE PLANS:
                         native: false
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                         nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-                    Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
       Execution mode: vectorized
       Map Vectorization:
           enabled: true
           enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-          inputFormatFeatureSupport: []
-          featureSupportInUse: []
+          inputFormatFeatureSupport: [DECIMAL_64]
+          featureSupportInUse: [DECIMAL_64]
           inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
           allNative: false
           usesVectorUDFAdaptor: false
@@ -372,12 +387,12 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: partial2
           outputColumnNames: _col0
-          Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
           Group By Operator
             aggregations: count(_col0)
             mode: partial2
             outputColumnNames: _col0
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             File Output Operator
               compressed: false
               table:
@@ -398,7 +413,7 @@ STAGE PLANS:
                   native: false
                   nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                   nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: bigint)
       Execution mode: vectorized
       Map Vectorization:
@@ -419,10 +434,10 @@ STAGE PLANS:
           aggregations: count(VALUE._col0)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat
@@ -446,9 +461,13 @@ POSTHOOK: Input: default@alltypesorc
 PREHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where ctimestamp1
 PREHOOK: type: QUERY
+PREHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 POSTHOOK: query: explain vectorization expression
 select count (distinct cint) from alltypesorc where ctimestamp1
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@alltypesorc
+#### A masked pattern was here ####
 PLAN VECTORIZATION:
   enabled: true
   enabledConditionsMet: [hive.vectorized.execution.enabled IS true]
@@ -464,7 +483,7 @@ STAGE PLANS:
       Map Operator Tree:
           TableScan
             alias: alltypesorc
-            Statistics: Num rows: 12288 Data size: 2641964 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 12288 Data size: 528216 Basic stats: COMPLETE Column stats: COMPLETE
             TableScan Vectorization:
                 native: true
             Filter Operator
@@ -473,7 +492,7 @@ STAGE PLANS:
                   native: true
                   predicateExpression: SelectColumnIsTrue(col 13:boolean)(children: CastTimestampToBoolean(col 8:timestamp) -> 13:boolean)
               predicate: ctimestamp1 (type: timestamp)
-              Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 6144 Data size: 264108 Basic stats: COMPLETE Column stats: COMPLETE
               Select Operator
                 expressions: cint (type: int)
                 outputColumnNames: cint
@@ -481,7 +500,7 @@ STAGE PLANS:
                     className: VectorSelectOperator
                     native: true
                     projectedOutputColumnNums: [2]
-                Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                Statistics: Num rows: 6144 Data size: 264108 Basic stats: COMPLETE Column stats: COMPLETE
                 Group By Operator
                   Group By Vectorization:
                       className: VectorGroupByOperator
@@ -491,9 +510,10 @@ STAGE PLANS:
                       vectorProcessingMode: HASH
                       projectedOutputColumnNums: []
                   keys: cint (type: int)
+                  minReductionHashAggr: 0.99
                   mode: hash
                   outputColumnNames: _col0
-                  Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                  Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
                   Reduce Output Operator
                     key expressions: _col0 (type: int)
                     sort order: +
@@ -503,13 +523,13 @@ STAGE PLANS:
                         native: false
                         nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                         nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-                    Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+                    Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
       Execution mode: vectorized
       Map Vectorization:
           enabled: true
           enabledConditionsMet: hive.vectorized.use.vectorized.input.format IS true
-          inputFormatFeatureSupport: []
-          featureSupportInUse: []
+          inputFormatFeatureSupport: [DECIMAL_64]
+          featureSupportInUse: [DECIMAL_64]
           inputFileFormats: org.apache.hadoop.hive.ql.io.orc.OrcInputFormat
           allNative: false
           usesVectorUDFAdaptor: false
@@ -523,12 +543,12 @@ STAGE PLANS:
           keys: KEY._col0 (type: int)
           mode: partial2
           outputColumnNames: _col0
-          Statistics: Num rows: 6144 Data size: 1320982 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 3072 Data size: 9176 Basic stats: COMPLETE Column stats: COMPLETE
           Group By Operator
             aggregations: count(_col0)
             mode: partial2
             outputColumnNames: _col0
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             File Output Operator
               compressed: false
               table:
@@ -549,7 +569,7 @@ STAGE PLANS:
                   native: false
                   nativeConditionsMet: hive.vectorized.execution.reducesink.new.enabled IS true, No PTF TopN IS true, No DISTINCT columns IS true, BinarySortableSerDe for keys IS true, LazyBinarySerDe for values IS true
                   nativeConditionsNotMet: hive.execution.engine mr IN [tez, spark] IS false
-              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+              Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
               value expressions: _col0 (type: bigint)
       Execution mode: vectorized
       Map Vectorization:
@@ -570,10 +590,10 @@ STAGE PLANS:
           aggregations: count(VALUE._col0)
           mode: mergepartial
           outputColumnNames: _col0
-          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+          Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
           File Output Operator
             compressed: false
-            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
+            Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: COMPLETE
             table:
                 input format: org.apache.hadoop.mapred.SequenceFileInputFormat
                 output format: org.apache.hadoop.hive.ql.io.HiveSequenceFileOutputFormat

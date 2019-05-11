@@ -6,6 +6,8 @@ JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -14,6 +16,8 @@ JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -28,6 +32,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -40,6 +45,7 @@ STAGE PLANS:
                         keys:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -53,6 +59,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -73,6 +80,7 @@ STAGE PLANS:
                         Statistics: Num rows: 550 Data size: 5843 Basic stats: COMPLETE Column stats: NONE
                         Group By Operator
                           aggregations: sum(hash(_col2,_col3))
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -80,9 +88,11 @@ STAGE PLANS:
                             sort order: 
                             Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -130,6 +140,8 @@ LEFT OUTER JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -138,6 +150,8 @@ LEFT OUTER JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -161,6 +175,7 @@ STAGE PLANS:
                       keys:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -191,6 +206,7 @@ STAGE PLANS:
                       Statistics: Num rows: 550 Data size: 5843 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -198,9 +214,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -248,6 +266,8 @@ RIGHT OUTER JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -256,6 +276,8 @@ RIGHT OUTER JOIN
 ON (x.key = Y.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -279,6 +301,7 @@ STAGE PLANS:
                       keys:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -309,6 +332,7 @@ STAGE PLANS:
                       Statistics: Num rows: 550 Data size: 5843 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -316,9 +340,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 3 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -369,6 +395,8 @@ JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -380,6 +408,8 @@ JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -394,6 +424,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -407,12 +438,14 @@ STAGE PLANS:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
                           2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Map 4 
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -426,6 +459,7 @@ STAGE PLANS:
                           0 _col0 (type: string)
                           1 _col0 (type: string)
                           2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -439,6 +473,7 @@ STAGE PLANS:
             Map Operator Tree:
                 TableScan
                   alias: src
+                  filterExpr: key is not null (type: boolean)
                   Statistics: Num rows: 500 Data size: 5312 Basic stats: COMPLETE Column stats: NONE
                   Filter Operator
                     predicate: key is not null (type: boolean)
@@ -462,6 +497,7 @@ STAGE PLANS:
                         Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                         Group By Operator
                           aggregations: sum(hash(_col2,_col3))
+                          minReductionHashAggr: 0.99
                           mode: hash
                           outputColumnNames: _col0
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -469,9 +505,11 @@ STAGE PLANS:
                             sort order: 
                             Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                             value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -528,6 +566,8 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -539,6 +579,8 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -563,6 +605,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Map 4 
@@ -579,6 +622,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -612,6 +656,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -619,9 +664,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -678,6 +725,8 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -689,6 +738,8 @@ LEFT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -713,6 +764,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Map 4 
@@ -729,6 +781,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -762,6 +815,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -769,9 +823,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 2 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -828,6 +884,8 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -839,6 +897,8 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -863,6 +923,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Map 2 
@@ -879,6 +940,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -912,6 +974,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -919,9 +982,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 4 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)
@@ -978,6 +1043,8 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 PREHOOK: type: QUERY
+PREHOOK: Input: default@src
+#### A masked pattern was here ####
 POSTHOOK: query: explain
 FROM 
 (SELECT src.* FROM src sort by key) x
@@ -989,6 +1056,8 @@ RIGHT OUTER JOIN
 ON (x.key = Z.key)
 select sum(hash(Y.key,Y.value))
 POSTHOOK: type: QUERY
+POSTHOOK: Input: default@src
+#### A masked pattern was here ####
 STAGE DEPENDENCIES:
   Stage-2 is a root stage
   Stage-1 depends on stages: Stage-2
@@ -1013,6 +1082,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Map 2 
@@ -1029,6 +1099,7 @@ STAGE PLANS:
                         0 _col0 (type: string)
                         1 _col0 (type: string)
                         2 _col0 (type: string)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
 
@@ -1062,6 +1133,7 @@ STAGE PLANS:
                       Statistics: Num rows: 1100 Data size: 11686 Basic stats: COMPLETE Column stats: NONE
                       Group By Operator
                         aggregations: sum(hash(_col2,_col3))
+                        minReductionHashAggr: 0.99
                         mode: hash
                         outputColumnNames: _col0
                         Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
@@ -1069,9 +1141,11 @@ STAGE PLANS:
                           sort order: 
                           Statistics: Num rows: 1 Data size: 8 Basic stats: COMPLETE Column stats: NONE
                           value expressions: _col0 (type: bigint)
+            Execution mode: vectorized
             Local Work:
               Map Reduce Local Work
         Reducer 4 
+            Execution mode: vectorized
             Reduce Operator Tree:
               Group By Operator
                 aggregations: sum(VALUE._col0)

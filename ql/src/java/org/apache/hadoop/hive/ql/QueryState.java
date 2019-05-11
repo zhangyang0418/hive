@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -19,11 +19,13 @@
 package org.apache.hadoop.hive.ql;
 
 import java.util.Map;
-
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.ql.lockmgr.HiveTxnManager;
 import org.apache.hadoop.hive.ql.plan.HiveOperation;
 import org.apache.hadoop.hive.ql.session.LineageState;
+import org.apache.hadoop.hive.ql.session.SessionState;
+import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.tez.dag.api.TezConfiguration;
 
 /**
  * The class to store query level info such as queryId. Multiple queries can run
@@ -51,6 +53,12 @@ public class QueryState {
   private HiveTxnManager txnManager;
 
   /**
+   * Holds the number of rows affected for insert queries.
+   */
+  private long numModifiedRows = 0;
+
+  static public final String USERID_TAG = "userid";
+  /**
    * Private constructor, use QueryState.Builder instead.
    * @param conf The query specific configuration object
    */
@@ -58,6 +66,7 @@ public class QueryState {
     this.queryConf = conf;
   }
 
+  // Get the query id stored in query specific config.
   public String getQueryId() {
     return (queryConf.getVar(HiveConf.ConfVars.HIVEQUERYID));
   }
@@ -101,12 +110,42 @@ public class QueryState {
     this.txnManager = txnManager;
   }
 
+  public long getNumModifiedRows() {
+    return numModifiedRows;
+  }
+
+  public void setNumModifiedRows(long numModifiedRows) {
+    this.numModifiedRows = numModifiedRows;
+  }
+
+  public String getQueryTag() {
+    return HiveConf.getVar(this.queryConf, HiveConf.ConfVars.HIVEQUERYTAG);
+  }
+
+  public void setQueryTag(String queryTag) {
+    HiveConf.setVar(this.queryConf, HiveConf.ConfVars.HIVEQUERYTAG, queryTag);
+  }
+
+  public static void setApplicationTag(HiveConf queryConf, String queryTag) {
+    String jobTag = HiveConf.getVar(queryConf, HiveConf.ConfVars.HIVEQUERYTAG);
+    if (jobTag == null || jobTag.isEmpty()) {
+      jobTag = queryTag;
+    } else {
+      jobTag = jobTag.concat("," + queryTag);
+    }
+    if (SessionState.get() != null) {
+      jobTag = jobTag.concat("," + USERID_TAG + "=" + SessionState.get().getUserName());
+    }
+    queryConf.set(MRJobConfig.JOB_TAGS, jobTag);
+    queryConf.set(TezConfiguration.TEZ_APPLICATION_TAGS, jobTag);
+  }
+
   /**
    * Builder to instantiate the QueryState object.
    */
   public static class Builder {
     private Map<String, String> confOverlay = null;
-    private boolean runAsync = false;
+    private boolean isolated = true;
     private boolean generateNewQueryId = false;
     private HiveConf hiveConf = null;
     private LineageState lineageState = null;
@@ -118,17 +157,6 @@ public class QueryState {
     }
 
     /**
-     * Set this to true if the configuration should be detached from the original config. If not
-     * set the default value is false.
-     * @param runAsync If the configuration should be detached
-     * @return The builder
-     */
-    public Builder withRunAsync(boolean runAsync) {
-      this.runAsync = runAsync;
-      return this;
-    }
-
-    /**
      * Set this if there are specific configuration values which should be added to the original
      * config. If at least one value is set, then the configuration will be detached from the
      * original one.
@@ -137,6 +165,16 @@ public class QueryState {
      */
     public Builder withConfOverlay(Map<String, String> confOverlay) {
       this.confOverlay = confOverlay;
+      return this;
+    }
+
+    /**
+     * Disable configuration isolation.
+     *
+     * For internal use / testing purposes only.
+     */
+    public Builder nonIsolated() {
+      isolated = false;
       return this;
     }
 
@@ -182,14 +220,17 @@ public class QueryState {
      * @return The generated QueryState object
      */
     public QueryState build() {
-      HiveConf queryConf = hiveConf;
+      HiveConf queryConf;
 
-      if (queryConf == null) {
-        // Generate a new conf if necessary
-        queryConf = new HiveConf();
-      } else if (runAsync || (confOverlay != null && !confOverlay.isEmpty())) {
-        // Detach the original conf if necessary
-        queryConf = new HiveConf(queryConf);
+      if (isolated) {
+        // isolate query conf
+        if (hiveConf == null) {
+          queryConf = new HiveConf();
+        } else {
+          queryConf = new HiveConf(hiveConf);
+        }
+      } else {
+        queryConf = hiveConf;
       }
 
       // Set the specific parameters if needed
@@ -206,7 +247,15 @@ public class QueryState {
 
       // Generate the new queryId if needed
       if (generateNewQueryId) {
-        queryConf.setVar(HiveConf.ConfVars.HIVEQUERYID, QueryPlan.makeQueryId());
+        String queryId = QueryPlan.makeQueryId();
+        queryConf.setVar(HiveConf.ConfVars.HIVEQUERYID, queryId);
+        setApplicationTag(queryConf, queryId);
+
+        // FIXME: druid storage handler relies on query.id to maintain some staging directories
+        // expose queryid to session level
+        if (hiveConf != null) {
+          hiveConf.setVar(HiveConf.ConfVars.HIVEQUERYID, queryId);
+        }
       }
 
       QueryState queryState = new QueryState(queryConf);

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,7 +21,6 @@ package org.apache.hive.jdbc;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -66,6 +65,7 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.metastore.ObjectStore;
+import org.apache.hadoop.hive.metastore.PersistenceManagerProvider;
 import org.apache.hadoop.hive.ql.QueryPlan;
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry;
 import org.apache.hadoop.hive.ql.exec.UDF;
@@ -82,7 +82,9 @@ import org.datanucleus.AbstractNucleusContext;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
+import static org.apache.hadoop.hive.metastore.ReplChangeManager.SOURCE_OF_REPLICATION;
 
 public class TestJdbcWithMiniHS2 {
   private static MiniHS2 miniHS2 = null;
@@ -119,7 +121,8 @@ public class TestJdbcWithMiniHS2 {
     }
     Statement stmt = conDefault.createStatement();
     stmt.execute("drop database if exists " + testDbName + " cascade");
-    stmt.execute("create database " + testDbName);
+    stmt.execute("create database " + testDbName + " WITH DBPROPERTIES ( '" +
+            SOURCE_OF_REPLICATION + "' = '1,2,3')");
     stmt.close();
 
     try {
@@ -278,21 +281,75 @@ public class TestJdbcWithMiniHS2 {
   }
 
   @Test
+  public void testParallelCompilation3() throws Exception {
+    Statement stmt = conTestDb.createStatement();
+    stmt.execute("set hive.driver.parallel.compilation=true");
+    stmt.execute("set hive.server2.async.exec.async.compile=true");
+    stmt.close();
+    Connection conn = getConnection(testDbName);
+    stmt = conn.createStatement();
+    stmt.execute("set hive.driver.parallel.compilation=true");
+    stmt.execute("set hive.server2.async.exec.async.compile=true");
+    stmt.close();
+    int poolSize = 100;
+    SynchronousQueue<Runnable> executorQueue1 = new SynchronousQueue<Runnable>();
+    ExecutorService workers1 =
+        new ThreadPoolExecutor(1, poolSize, 20, TimeUnit.SECONDS, executorQueue1);
+    SynchronousQueue<Runnable> executorQueue2 = new SynchronousQueue<Runnable>();
+    ExecutorService workers2 =
+        new ThreadPoolExecutor(1, poolSize, 20, TimeUnit.SECONDS, executorQueue2);
+    List<Future<Boolean>> list1 = startTasks(workers1, conTestDb, tableName, 10);
+    List<Future<Boolean>> list2 = startTasks(workers2, conn, tableName, 10);
+    finishTasks(list1, workers1);
+    finishTasks(list2, workers2);
+    conn.close();
+  }
+
+  @Test
+  public void testParallelCompilation4() throws Exception {
+    Statement stmt = conTestDb.createStatement();
+    stmt.execute("set hive.driver.parallel.compilation=true");
+    stmt.execute("set hive.server2.async.exec.async.compile=false");
+    stmt.close();
+    Connection conn = getConnection(testDbName);
+    stmt = conn.createStatement();
+    stmt.execute("set hive.driver.parallel.compilation=true");
+    stmt.execute("set hive.server2.async.exec.async.compile=false");
+    stmt.close();
+    int poolSize = 100;
+    SynchronousQueue<Runnable> executorQueue1 = new SynchronousQueue<Runnable>();
+    ExecutorService workers1 =
+        new ThreadPoolExecutor(1, poolSize, 20, TimeUnit.SECONDS, executorQueue1);
+    SynchronousQueue<Runnable> executorQueue2 = new SynchronousQueue<Runnable>();
+    ExecutorService workers2 =
+        new ThreadPoolExecutor(1, poolSize, 20, TimeUnit.SECONDS, executorQueue2);
+    List<Future<Boolean>> list1 = startTasks(workers1, conTestDb, tableName, 10);
+    List<Future<Boolean>> list2 = startTasks(workers2, conn, tableName, 10);
+    finishTasks(list1, workers1);
+    finishTasks(list2, workers2);
+    conn.close();
+  }
+
+  @Test
   public void testConcurrentStatements() throws Exception {
     startConcurrencyTest(conTestDb, tableName, 50);
   }
 
   private static void startConcurrencyTest(Connection conn, String tableName, int numTasks) {
     // Start concurrent testing
-    int POOL_SIZE = 100;
-    int TASK_COUNT = numTasks;
-
+    int poolSize = 100;
     SynchronousQueue<Runnable> executorQueue = new SynchronousQueue<Runnable>();
     ExecutorService workers =
-        new ThreadPoolExecutor(1, POOL_SIZE, 20, TimeUnit.SECONDS, executorQueue);
+        new ThreadPoolExecutor(1, poolSize, 20, TimeUnit.SECONDS, executorQueue);
+    List<Future<Boolean>> list = startTasks(workers, conn, tableName, numTasks);
+    finishTasks(list, workers);
+  }
+
+  private static List<Future<Boolean>> startTasks(ExecutorService workers, Connection conn,
+      String tableName, int numTasks) {
     List<Future<Boolean>> list = new ArrayList<Future<Boolean>>();
     int i = 0;
-    while (i < TASK_COUNT) {
+    while (i < numTasks) {
       try {
         Future<Boolean> future = workers.submit(new JDBCTask(conn, i, tableName));
         list.add(future);
@@ -305,7 +362,10 @@ public class TestJdbcWithMiniHS2 {
         }
       }
     }
+    return list;
+  }
 
+  private static void finishTasks(List<Future<Boolean>> list, ExecutorService workers) {
     for (Future<Boolean> future : list) {
       try {
         Boolean result = future.get(30, TimeUnit.SECONDS);
@@ -960,12 +1020,14 @@ public class TestJdbcWithMiniHS2 {
     conf.setIntVar(HiveConf.ConfVars.HIVE_SERVER2_THRIFT_HTTP_RESPONSE_HEADER_SIZE, 1024);
     startMiniHS2(conf, true);
 
-    // Username is added to the request header
-    String userName = StringUtils.leftPad("*", 100);
+    // Username and password are added to the http request header.
+    // We will test the reconfiguration of the header size by changing the password length.
+    String userName = "userName";
+    String password = StringUtils.leftPad("*", 100);
     Connection conn = null;
     // This should go fine, since header should be less than the configured header size
     try {
-      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, "password");
+      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, password);
     } catch (Exception e) {
       fail("Not expecting exception: " + e);
     } finally {
@@ -974,13 +1036,13 @@ public class TestJdbcWithMiniHS2 {
       }
     }
 
-    // This should fail with given HTTP response code 413 in error message, since header is more
+    // This should fail with given HTTP response code 431 in error message, since header is more
     // than the configured the header size
-    userName = StringUtils.leftPad("*", 2000);
+    password = StringUtils.leftPad("*", 2000);
     Exception headerException = null;
     try {
       conn = null;
-      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, "password");
+      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, password);
     } catch (Exception e) {
       headerException = e;
     } finally {
@@ -990,7 +1052,7 @@ public class TestJdbcWithMiniHS2 {
 
       assertTrue("Header exception should be thrown", headerException != null);
       assertTrue("Incorrect HTTP Response:" + headerException.getMessage(),
-          headerException.getMessage().contains("HTTP Response code: 413"));
+          headerException.getMessage().contains("HTTP Response code: 431"));
     }
 
     // Stop HiveServer2 to increase header size
@@ -1002,7 +1064,7 @@ public class TestJdbcWithMiniHS2 {
     // This should now go fine, since we increased the configured header size
     try {
       conn = null;
-      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, "password");
+      conn = getConnection(miniHS2.getJdbcURL(testDbName), userName, password);
     } catch (Exception e) {
       fail("Not expecting exception: " + e);
     } finally {
@@ -1019,6 +1081,7 @@ public class TestJdbcWithMiniHS2 {
    * Test for jdbc driver retry on NoHttpResponseException
    * @throws Exception
    */
+  @Ignore("Flaky test. Should be re-enabled in HIVE-19706")
   @Test
   public void testHttpRetryOnServerIdleTimeout() throws Exception {
     // Stop HiveServer2
@@ -1085,7 +1148,7 @@ public class TestJdbcWithMiniHS2 {
     NucleusContext nc = null;
     Map<String, ClassLoaderResolver> cMap;
     try {
-      pmf = ObjectStore.class.getDeclaredField("pmf");
+      pmf = PersistenceManagerProvider.class.getDeclaredField("pmf");
       if (pmf != null) {
         pmf.setAccessible(true);
         jdoPmf = (JDOPersistenceManagerFactory) pmf.get(null);
@@ -1248,6 +1311,19 @@ public class TestJdbcWithMiniHS2 {
     assertTrue("query has results", res.next());
     assertEquals(3, res.getInt(1));
     assertFalse("no more results", res.next());
+
+    //try creating same function again which should fail with AlreadyExistsException
+    String createSameFunctionAgain =
+            "CREATE FUNCTION example_add AS '" + testUdfClassName + "' USING JAR '" + jarFilePath + "'";
+    try {
+      stmt.execute(createSameFunctionAgain);
+    }catch (Exception e){
+      assertTrue("recreating same function failed with AlreadyExistsException ", e.getMessage().contains("AlreadyExistsException"));
+    }
+
+    // Call describe to see if function still available in registry
+    res = stmt.executeQuery("DESCRIBE FUNCTION " + testDbName + ".example_add");
+    checkForNotExist(res);
 
     // A new connection should be able to call describe/use function without issue
     Connection conn2 = getConnection(testDbName);
@@ -1414,71 +1490,6 @@ public class TestJdbcWithMiniHS2 {
     }
   }
 
-  /**
-   * Test CLI kill command of a query that is running.
-   * We spawn 2 threads - one running the query and
-   * the other attempting to cancel.
-   * We're using a dummy udf to simulate a query,
-   * that runs for a sufficiently long time.
-   * @throws Exception
-   */
-  @Test
-  public void testKillQuery() throws Exception {
-    Connection con = conTestDb;
-    Connection con2 = getConnection(testDbName);
-
-    String udfName = SleepMsUDF.class.getName();
-    Statement stmt1 = con.createStatement();
-    final Statement stmt2 = con2.createStatement();
-    stmt1.execute("create temporary function sleepMsUDF as '" + udfName + "'");
-    stmt1.close();
-    final Statement stmt = con.createStatement();
-    final ExceptionHolder tExecuteHolder = new ExceptionHolder();
-    final ExceptionHolder tKillHolder = new ExceptionHolder();
-
-    // Thread executing the query
-    Thread tExecute = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          System.out.println("Executing query: ");
-          // The test table has 500 rows, so total query time should be ~ 500*500ms
-          stmt.executeQuery("select sleepMsUDF(t1.int_col, 100), t1.int_col, t2.int_col " +
-              "from " + tableName + " t1 join " + tableName + " t2 on t1.int_col = t2.int_col");
-          fail("Expecting SQLException");
-        } catch (SQLException e) {
-          tExecuteHolder.throwable = e;
-        }
-      }
-    });
-    // Thread killing the query
-    Thread tKill = new Thread(new Runnable() {
-      @Override
-      public void run() {
-        try {
-          Thread.sleep(2000);
-          String queryId = ((HiveStatement) stmt).getQueryId();
-          System.out.println("Killing query: " + queryId);
-
-          stmt2.execute("kill query '" + queryId + "'");
-          stmt2.close();
-        } catch (Exception e) {
-          tKillHolder.throwable = e;
-        }
-      }
-    });
-
-    tExecute.start();
-    tKill.start();
-    tExecute.join();
-    tKill.join();
-    stmt.close();
-    con2.close();
-
-    assertNotNull("tExecute", tExecuteHolder.throwable);
-    assertNull("tCancel", tKillHolder.throwable);
-  }
-
   private static class ExceptionHolder {
     Throwable throwable;
   }
@@ -1616,5 +1627,53 @@ public class TestJdbcWithMiniHS2 {
       verticesLists.add(vertices);
     }
     return verticesLists;
+  }
+
+  /**
+   * Test 'describe extended' on tables that have special white space characters in the row format.
+   */
+  @Test
+  public void testDescribe() throws Exception {
+    try (Statement stmt = conTestDb.createStatement()) {
+      String table = "testDescribe";
+      stmt.execute("drop table if exists " + table);
+      stmt.execute("create table " + table + " (orderid int, orderdate string, customerid int)"
+          + " ROW FORMAT DELIMITED FIELDS terminated by '\\t' LINES terminated by '\\n'");
+      String extendedDescription = getDetailedTableDescription(stmt, table);
+      assertNotNull("could not get Detailed Table Information", extendedDescription);
+      assertTrue("description appears truncated: " + extendedDescription,
+          extendedDescription.endsWith(")"));
+      assertTrue("bad line delimiter: " + extendedDescription,
+          extendedDescription.contains("line.delim=\\n"));
+      assertTrue("bad field delimiter: " + extendedDescription,
+          extendedDescription.contains("field.delim=\\t"));
+
+      String view = "testDescribeView";
+      stmt.execute("create view " + view + " as select * from " + table);
+      String extendedViewDescription = getDetailedTableDescription(stmt, view);
+      assertTrue("bad view text: " + extendedViewDescription,
+          extendedViewDescription.contains("viewOriginalText:select * from " + table));
+      assertTrue("bad expanded view text: " + extendedViewDescription,
+          extendedViewDescription.contains(
+              "viewExpandedText:select `testdescribe`.`orderid`, `testdescribe`.`orderdate`, "
+                  + "`testdescribe`.`customerid` from `testjdbcminihs2`"));
+    }
+  }
+
+  /**
+   * Get Detailed Table Information via jdbc
+   */
+  static String getDetailedTableDescription(Statement stmt, String table) throws SQLException {
+    String extendedDescription = null;
+    try (ResultSet rs = stmt.executeQuery("describe extended " + table)) {
+      while (rs.next()) {
+        String out = rs.getString(1);
+        String tableInfo = rs.getString(2);
+        if ("Detailed Table Information".equals(out)) { // from TextMetaDataFormatter
+          extendedDescription = tableInfo;
+        }
+      }
+    }
+    return extendedDescription;
   }
 }

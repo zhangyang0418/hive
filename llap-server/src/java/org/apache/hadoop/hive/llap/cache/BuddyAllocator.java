@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.hive.llap.cache;
 
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -45,10 +46,10 @@ import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.conf.HiveConf.ConfVars;
 import org.apache.hadoop.hive.llap.io.api.impl.LlapIoImpl;
 import org.apache.hadoop.hive.llap.metrics.LlapDaemonCacheMetrics;
-import org.apache.hive.common.util.FixedSizedObjectPool;
+import org.apache.hadoop.hive.ql.io.orc.encoded.StoppableAllocator;
 
 public final class BuddyAllocator
-  implements EvictionAwareAllocator, BuddyAllocatorMXBean, LlapOomDebugDump {
+  implements EvictionAwareAllocator, StoppableAllocator, BuddyAllocatorMXBean, LlapIoDebugDump {
   private final Arena[] arenas;
   private final AtomicInteger allocatedArenas = new AtomicInteger(0);
 
@@ -81,8 +82,15 @@ public final class BuddyAllocator
       .asFileAttribute(PosixFilePermissions.fromString("rwx------"));
   private final AtomicLong[] defragCounters;
   private final boolean doUseFreeListDiscard, doUseBruteDiscard;
-  private final FixedSizedObjectPool<DiscardContext> ctxPool;
   private final static boolean assertsEnabled = areAssertsEnabled();
+  // Discard context that is cached for reuse per thread to avoid allocating lots of arrays,
+  // and then resizing them down the line if we need a bigger size.
+  // Only the IO threads need this, so there'd be at most few dozen objects.
+  private final static ThreadLocal<DiscardContext> threadCtx = new ThreadLocal<DiscardContext>() {
+    protected DiscardContext initialValue() {
+      return new DiscardContext();
+    };
+  };
 
   public BuddyAllocator(Configuration conf, MemoryManager mm, LlapDaemonCacheMetrics metrics) {
     this(HiveConf.getBoolVar(conf, ConfVars.LLAP_ALLOCATOR_DIRECT),
@@ -93,7 +101,9 @@ public final class BuddyAllocator
         getMaxTotalMemorySize(conf),
         HiveConf.getSizeVar(conf, ConfVars.LLAP_ALLOCATOR_DEFRAG_HEADROOM),
         HiveConf.getVar(conf, ConfVars.LLAP_ALLOCATOR_MAPPED_PATH),
-        mm, metrics, HiveConf.getVar(conf, ConfVars.LLAP_ALLOCATOR_DISCARD_METHOD));
+        mm, metrics, HiveConf.getVar(conf, ConfVars.LLAP_ALLOCATOR_DISCARD_METHOD),
+        HiveConf.getBoolVar(conf, ConfVars.LLAP_ALLOCATOR_PREALLOCATE)
+        );
   }
 
   private static boolean areAssertsEnabled() {
@@ -114,17 +124,21 @@ public final class BuddyAllocator
   }
 
   @VisibleForTesting
-  public BuddyAllocator(boolean isDirectVal, boolean isMappedVal, int minAllocVal,
-      int maxAllocVal, int arenaCount, long maxSizeVal, long defragHeadroom, String mapPath,
-      MemoryManager memoryManager, LlapDaemonCacheMetrics metrics, String discardMethod) {
+  public BuddyAllocator(boolean isDirectVal, boolean isMappedVal, int minAllocVal, int maxAllocVal,
+      int arenaCount, long maxSizeVal, long defragHeadroom, String mapPath,
+      MemoryManager memoryManager, LlapDaemonCacheMetrics metrics, String discardMethod,
+      boolean doPreallocate) {
     isDirect = isDirectVal;
     isMapped = isMappedVal;
     minAllocation = minAllocVal;
     maxAllocation = maxAllocVal;
     if (isMapped) {
       try {
-        cacheDir = Files.createTempDirectory(
-            FileSystems.getDefault().getPath(mapPath), "llap-", RWX);
+        Path path = FileSystems.getDefault().getPath(mapPath);
+        if (!Files.exists(path)) {
+          Files.createDirectory(path);
+        }
+        cacheDir = Files.createTempDirectory(path, "llap-", RWX);
       } catch (IOException ioe) {
         // conf validator already checks this, so it will never trigger usually
         throw new AssertionError("Configured mmap directory should be writable", ioe);
@@ -145,30 +159,22 @@ public final class BuddyAllocator
     for (int i = 0; i < maxArenas; ++i) {
       arenas[i] = new Arena();
     }
-    Arena firstArena = arenas[0];
-    firstArena.init(0);
-    allocatedArenas.set(1);
+    int initCount = doPreallocate && !isMapped ? maxArenas : 1;
+    for (int i = 0; i < initCount; ++i) {
+      arenas[i].init(i);
+      metrics.incrAllocatedArena();
+    }
+    allocatedArenas.set(initCount);
     this.memoryManager = memoryManager;
     defragCounters = new AtomicLong[maxAllocLog2 - minAllocLog2 + 1];
     for (int i = 0; i < defragCounters.length; ++i) {
       defragCounters[i] = new AtomicLong(0);
     }
     this.metrics = metrics;
-    metrics.incrAllocatedArena();
     boolean isBoth = null == discardMethod || "both".equalsIgnoreCase(discardMethod);
     doUseFreeListDiscard = isBoth || "freelist".equalsIgnoreCase(discardMethod);
     doUseBruteDiscard = isBoth || "brute".equalsIgnoreCase(discardMethod);
-    ctxPool = new FixedSizedObjectPool<DiscardContext>(32,
-        new FixedSizedObjectPool.PoolObjectHelper<DiscardContext>() {
-          @Override
-          public DiscardContext create() {
-            return new DiscardContext();
-          }
-          @Override
-          public void resetBeforeOffer(DiscardContext t) {
-          }
-      });
- }
+  }
 
   public long determineMaxMmSize(long defragHeadroom, long maxMmSize) {
     if (defragHeadroom > 0) {
@@ -228,15 +234,22 @@ public final class BuddyAllocator
     return (int)arenaSizeVal;
   }
 
+
+  @VisibleForTesting
   @Override
   public void allocateMultiple(MemoryBuffer[] dest, int size)
       throws AllocatorOutOfMemoryException {
-    allocateMultiple(dest, size, null);
+    allocateMultiple(dest, size, null, null);
   }
 
-  // TODO: would it make sense to return buffers asynchronously?
   @Override
   public void allocateMultiple(MemoryBuffer[] dest, int size, BufferObjectFactory factory)
+      throws AllocatorOutOfMemoryException {
+    allocateMultiple(dest, size, factory, null);
+  }
+
+  @Override
+  public void allocateMultiple(MemoryBuffer[] dest, int size, BufferObjectFactory factory, AtomicBoolean isStopped)
       throws AllocatorOutOfMemoryException {
     assert size > 0 : "size is " + size;
     if (size > maxAllocation) {
@@ -247,7 +260,7 @@ public final class BuddyAllocator
     int allocationSize = 1 << allocLog2;
 
     // If using async, we could also reserve one by one.
-    memoryManager.reserveMemory(dest.length << allocLog2);
+    memoryManager.reserveMemory(dest.length << allocLog2, isStopped);
     for (int i = 0; i < dest.length; ++i) {
       if (dest[i] != null) continue;
       // Note: this is backward compat only. Should be removed with createUnallocated.
@@ -302,42 +315,46 @@ public final class BuddyAllocator
 
         // Try to force-evict the fragments of the requisite size.
         boolean hasDiscardedAny = false;
-        DiscardContext ctx = ctxPool.take();
-        try {
-          // Brute force may discard up to twice as many buffers.
-          int maxListSize = 1 << (doUseBruteDiscard ? freeListIx : (freeListIx - 1));
-          int requiredBlocks = dest.length - destAllocIx;
-          ctx.init(maxListSize, requiredBlocks);
-          // First, try to use the blocks of half size in every arena.
-          if (doUseFreeListDiscard && freeListIx > 0) {
-            discardBlocksBasedOnFreeLists(freeListIx, startArenaIx, arenaCount, ctx);
-            memoryForceReleased += ctx.memoryReleased;
-            hasDiscardedAny = ctx.resultCount > 0;
-            destAllocIx = allocateFromDiscardResult(
-                dest, destAllocIx, freeListIx, allocationSize, ctx);
-            if (destAllocIx == dest.length) return;
-          }
-          // Then, try the brute force search for something to throw away.
-          if (doUseBruteDiscard) {
-            ctx.resetResults();
-            discardBlocksBruteForce(freeListIx, startArenaIx, arenaCount, ctx);
-            memoryForceReleased += ctx.memoryReleased;
-            hasDiscardedAny = hasDiscardedAny || (ctx.resultCount > 0);
-            destAllocIx = allocateFromDiscardResult(
-                dest, destAllocIx, freeListIx, allocationSize, ctx);
-
-            if (destAllocIx == dest.length) return;
-          }
-        } finally {
-          ctxPool.offer(ctx);
+        DiscardContext ctx = threadCtx.get();
+        // Brute force may discard up to twice as many buffers.
+        int maxListSize = 1 << (doUseBruteDiscard ? freeListIx : (freeListIx - 1));
+        int requiredBlocks = dest.length - destAllocIx;
+        ctx.init(maxListSize, requiredBlocks);
+        // First, try to use the blocks of half size in every arena.
+        if (doUseFreeListDiscard && freeListIx > 0) {
+          discardBlocksBasedOnFreeLists(freeListIx, startArenaIx, arenaCount, ctx);
+          memoryForceReleased += ctx.memoryReleased;
+          hasDiscardedAny = ctx.resultCount > 0;
+          destAllocIx = allocateFromDiscardResult(
+              dest, destAllocIx, freeListIx, allocationSize, ctx);
+          if (destAllocIx == dest.length) return;
         }
+        // Then, try the brute force search for something to throw away.
+        if (doUseBruteDiscard) {
+          ctx.resetResults();
+          discardBlocksBruteForce(freeListIx, startArenaIx, arenaCount, ctx);
+          memoryForceReleased += ctx.memoryReleased;
+          hasDiscardedAny = hasDiscardedAny || (ctx.resultCount > 0);
+          destAllocIx = allocateFromDiscardResult(
+              dest, destAllocIx, freeListIx, allocationSize, ctx);
+          if (destAllocIx == dest.length) return;
+        }
+
         if (hasDiscardedAny) {
           discardFailed = 0;
         } else if (++discardFailed > MAX_DISCARD_ATTEMPTS) {
+          isFailed = true;
+          // Ensure all-or-nothing allocation.
+          for (int i = 0; i < destAllocIx; ++i) {
+            try {
+              deallocate(dest[i]);
+            } catch (Throwable t) {
+              LlapIoImpl.LOG.info("Failed to deallocate after a partially successful allocate: " + dest[i]);
+            }
+          }
           String msg = "Failed to allocate " + size + "; at " + destAllocIx + " out of "
               + dest.length + " (entire cache is fragmented and locked, or an internal issue)";
           logOomErrorMessage(msg);
-          isFailed = true;
           throw new AllocatorOutOfMemoryException(msg);
         }
         ++attempt;
@@ -549,7 +566,7 @@ public final class BuddyAllocator
   /**
    * Unlocks the buffer after the discard has been abandoned.
    */
-  private void cancelDiscard(LlapAllocatorBuffer buf, int arenaIx, int headerIx) {
+  private void cancelDiscard(LlapAllocatorBuffer buf, int arenaIx) {
     Boolean result = buf.cancelDiscard();
     if (result == null) return;
     // If the result is not null, the buffer was evicted during the move.
@@ -660,7 +677,6 @@ public final class BuddyAllocator
    */
   @Override
   public void debugDumpShort(StringBuilder sb) {
-    memoryManager.debugDumpShort(sb);
     sb.append("\nDefrag counters: ");
     for (int i = 0; i < defragCounters.length; ++i) {
       sb.append(defragCounters[i].get()).append(", ");
@@ -974,12 +990,12 @@ public final class BuddyAllocator
         if (assertsEnabled) {
           assertBufferLooksValid(freeListIx, buf, arenaIx, headerIx);
         }
-        cancelDiscard(buf, arenaIx, headerIx);
+        cancelDiscard(buf, arenaIx);
       } else {
         if (assertsEnabled) {
           checkHeader(headerIx, -1, true);
         }
-        addToFreeListWithMerge(headerIx, freeListIx, null, src);
+        addToFreeListWithMerge(headerIx, freeListIx, src);
       }
     }
 
@@ -1241,7 +1257,7 @@ public final class BuddyAllocator
             lastSplitNextHeader = headerIx; // If anything remains, this is where it starts.
             headerIx = getNextFreeListItem(origOffset);
           }
-          replaceListHeadUnderLock(splitList, headerIx, splitListIx); // In the end, update free list head.
+          replaceListHeadUnderLock(splitList, headerIx); // In the end, update free list head.
         } finally {
           splitList.lock.unlock();
         }
@@ -1257,7 +1273,7 @@ public final class BuddyAllocator
           int newListIndex = freeListIx;
           while (lastSplitBlocksRemaining > 0) {
             if ((lastSplitBlocksRemaining & 1) == 1) {
-              addToFreeListWithMerge(lastSplitNextHeader, newListIndex, null, src);
+              addToFreeListWithMerge(lastSplitNextHeader, newListIndex, src);
               lastSplitNextHeader += (1 << newListIndex);
             }
             lastSplitBlocksRemaining >>>= 1;
@@ -1276,7 +1292,7 @@ public final class BuddyAllocator
       buffer.setNewAllocLocation(arenaIx, headerIx);
     }
 
-    private void replaceListHeadUnderLock(FreeList freeList, int headerIx, int ix) {
+    private void replaceListHeadUnderLock(FreeList freeList, int headerIx) {
       if (headerIx == freeList.listHead) return;
       if (headerIx >= 0) {
         int newHeadOffset = offsetFromHeaderIndex(headerIx);
@@ -1346,7 +1362,7 @@ public final class BuddyAllocator
         }
         ++destIx;
       }
-      replaceListHeadUnderLock(freeList, current, freeListIx);
+      replaceListHeadUnderLock(freeList, current);
       return destIx;
     }
 
@@ -1360,25 +1376,26 @@ public final class BuddyAllocator
 
     public void deallocate(LlapAllocatorBuffer buffer, boolean isAfterMove) {
       assert data != null;
-      int pos = buffer.byteBuffer.position();
-      // Note: this is called by someone who has ensured the buffer is not going to be moved.
-      int headerIx = pos >>> minAllocLog2;
-      int freeListIx = freeListFromAllocSize(buffer.allocSize);
-      if (assertsEnabled && !isAfterMove) {
-        LlapAllocatorBuffer buf = buffers[headerIx];
-        if (buf != buffer) {
-          failWithLog(arenaIx + ":" + headerIx + " => "
+      if (buffer != null && buffer.byteBuffer != null) {
+        int pos = buffer.byteBuffer.position();
+        // Note: this is called by someone who has ensured the buffer is not going to be moved.
+        int headerIx = pos >>> minAllocLog2;
+        int freeListIx = freeListFromAllocSize(buffer.allocSize);
+        if (assertsEnabled && !isAfterMove) {
+          LlapAllocatorBuffer buf = buffers[headerIx];
+          if (buf != buffer) {
+            failWithLog(arenaIx + ":" + headerIx + " => "
               + toDebugString(buffer) + ", " + toDebugString(buf));
+          }
+          assertBufferLooksValid(freeListFromHeader(headers[headerIx]), buf, arenaIx, headerIx);
+          checkHeader(headerIx, freeListIx, true);
         }
-        assertBufferLooksValid(freeListFromHeader(headers[headerIx]), buf, arenaIx, headerIx);
-        checkHeader(headerIx, freeListIx, true);
+        buffers[headerIx] = null;
+        addToFreeListWithMerge(headerIx, freeListIx, CasLog.Src.DEALLOC);
       }
-      buffers[headerIx] = null;
-      addToFreeListWithMerge(headerIx, freeListIx, buffer, CasLog.Src.DEALLOC);
     }
 
-    private void addToFreeListWithMerge(int headerIx, int freeListIx,
-        LlapAllocatorBuffer buffer, CasLog.Src src) {
+    private void addToFreeListWithMerge(int headerIx, int freeListIx, CasLog.Src src) {
       while (true) {
         FreeList freeList = freeLists[freeListIx];
         int bHeaderIx = getBuddyHeaderIx(freeListIx, headerIx);
@@ -1563,12 +1580,6 @@ public final class BuddyAllocator
       a.testDump(sb);
     }
     return sb.toString();
-  }
-
-  @Override
-  public String debugDumpForOom() {
-    return "\nALLOCATOR STATE:\n" + debugDumpForOomInternal()
-        + "\nPARENT STATE:\n" + memoryManager.debugDumpForOom();
   }
 
   private String debugDumpForOomInternal() {
